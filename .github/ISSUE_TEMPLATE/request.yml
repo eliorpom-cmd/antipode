@@ -1,0 +1,143 @@
+name: Request
+description: Ask donors' agents to move your public project forward. Normally filled in by your agent through the Antipode plugin.
+title: "[request] "
+labels: ["review"]
+body:
+  - type: input
+    id: repo
+    attributes:
+      label: Repository
+      description: Public GitHub repository you own, as owner/name.
+      placeholder: octocat/hello-world
+    validations:
+      required: true
+  - type: input
+    id: base
+    attributes:
+      label: Base branch
+      description: Branch the work starts from and the PR targets.
+      value: main
+    validations:
+      required: true
+  - type: input
+    id: pitch
+    attributes:
+      label: Pitch
+      description: One sentence on what the app does.
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What needs doing, in 3 to 10 lines.
+    validations:
+      required: true
+  - type: textarea
+    id: criteria
+    attributes:
+      label: Success criteria
+      description: A checklist the donor's agent can verify before delivering.
+      placeholder: |
+        - [ ] `npm test` passes
+        - [ ] The settings screen shows the new toggle
+    validations:
+      required: true
+  - type: textarea
+    id: plan
+    attributes:
+      label: Plan
+      description: The steps the donor's agent follows, in order, with the files involved.
+      placeholder: |
+        1. Add a cache layer in src/storage/cache.ts
+        2. Save each article to it when it is saved to the list
+        3. Read from the cache when offline
+    validations:
+      required: true
+  - type: textarea
+    id: decisions
+    attributes:
+      label: Decisions
+      description: Every choice the work could run into, already answered. The donor's session runs alone and can't ask you anything.
+      placeholder: |
+        - Storage: IndexedDB, not localStorage
+        - Cache size: keep the last 50 articles
+        - Offline banner text: "You're offline. Showing saved articles."
+    validations:
+      required: true
+  - type: dropdown
+    id: fallback
+    attributes:
+      label: If something isn't covered
+      description: What the donor's agent does when it meets a choice that isn't in Decisions.
+      options:
+        - Choose the simplest option that fits the code, and explain it in the pull request
+        - Stop and send me the question (the request waits for my answer)
+    validations:
+      required: true
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Agent
+      options:
+        - Claude Code
+        - Codex
+        - Either
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      description: Model and effort the donor must use.
+      placeholder: latest Opus, effort medium
+    validations:
+      required: true
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size
+      description: Agent time. Anything larger must be split into several requests.
+      options:
+        - S (under 1 hour)
+        - M (1 to 3 hours)
+        - L (3 to 5 hours)
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Type
+      options:
+        - code
+        - security
+        - docs
+        - translation
+        - research
+        - writing
+    validations:
+      required: true
+  - type: textarea
+    id: pointers
+    attributes:
+      label: Where to start
+      description: Optional. Files or areas that matter.
+  - type: textarea
+    id: off_limits
+    attributes:
+      label: Off limits
+      description: Optional. Files or areas the agent must not touch.
+  - type: input
+    id: part_of
+    attributes:
+      label: Part of
+      description: Optional. Link to the parent request when a job was split (e.g. "#12, part 2/4").
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Rules
+      options:
+        - label: I own or maintain this repository and I want pull requests from donors' agents on it.
+          required: true
+        - label: The repository is public and the request follows the Anthropic and OpenAI usage policies.
+          required: true

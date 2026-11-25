@@ -1,0 +1,29 @@
+# Automatic checks on every new, edited or reopened issue. No AI runs here: the reading is done by
+# donors' own agents in their own sessions (/review). The script decides whether the issue is a
+# request (title or state label), so changing the title can't skip the checks.
+name: Intake
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+
+concurrency:
+  group: intake-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Automatic checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+          ACTION: ${{ github.event.action }}
+        run: python3 scripts/ats.py intake --issue "$NUMBER" --action "$ACTION"

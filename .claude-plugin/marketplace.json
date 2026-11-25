@@ -1,0 +1,15 @@
+{
+  "name": "antipode",
+  "description": "Share your unused Claude Code limits: your agent works on someone's public project, theirs work on yours.",
+  "owner": {
+    "name": "Elior",
+    "url": "https://byelior.dev"
+  },
+  "plugins": [
+    {
+      "name": "antipode",
+      "source": "./plugins/antipode",
+      "description": "Share your unused Claude Code limits: /antipode:start, /antipode:give, /antipode:ask, /antipode:review."
+    }
+  ]
+}

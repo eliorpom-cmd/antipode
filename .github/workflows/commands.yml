@@ -1,0 +1,29 @@
+# Slash commands posted on requests: /claim, /release, /delivered, /relay, /question, /review, /flag, /approve.
+# One run at a time per issue, so two donors can't both claim the same request. GitHub keeps only the
+# newest pending run, so each run answers every slash comment the bot hasn't answered yet.
+name: Commands
+
+on:
+  issue_comment:
+    types: [created]
+
+concurrency:
+  group: commands-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  command:
+    if: startsWith(github.event.comment.body, '/') && github.event.comment.user.type != 'Bot'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Handle commands
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: python3 scripts/ats.py command --issue "$NUMBER"

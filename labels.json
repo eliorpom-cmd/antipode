@@ -1,0 +1,77 @@
+[
+  {
+    "name": "review",
+    "color": "fbca04",
+    "description": "Waiting for the safety and clarity review"
+  },
+  {
+    "name": "open",
+    "color": "0e8a16",
+    "description": "Reviewed and ready for a donor"
+  },
+  {
+    "name": "claimed",
+    "color": "1d76db",
+    "description": "A donor's agent is working on it (6-hour lock)"
+  },
+  {
+    "name": "relay",
+    "color": "5319e7",
+    "description": "Partly done: the next donor continues from the relay note"
+  },
+  {
+    "name": "delivered",
+    "color": "c5def5",
+    "description": "Pull request opened on the requester's repository"
+  },
+  {
+    "name": "question",
+    "color": "d4c5f9",
+    "description": "A donor's agent is waiting for the requester's answer"
+  },
+  {
+    "name": "merged",
+    "color": "6f42c1",
+    "description": "The requester merged the work"
+  },
+  {
+    "name": "rejected",
+    "color": "b60205",
+    "description": "Refused at review, or PR closed by the requester"
+  },
+  {
+    "name": "expired",
+    "color": "cccccc",
+    "description": "Open 30 days without a donor"
+  },
+  {
+    "name": "flagged",
+    "color": "d93f0b",
+    "description": "Reported by a donor's agent; a maintainer checks it"
+  },
+  {
+    "name": "clarity:1",
+    "color": "f9d0c4",
+    "description": "Clarity score 1/5"
+  },
+  {
+    "name": "clarity:2",
+    "color": "f9d0c4",
+    "description": "Clarity score 2/5"
+  },
+  {
+    "name": "clarity:3",
+    "color": "fef2c0",
+    "description": "Clarity score 3/5"
+  },
+  {
+    "name": "clarity:4",
+    "color": "c2e0c6",
+    "description": "Clarity score 4/5"
+  },
+  {
+    "name": "clarity:5",
+    "color": "c2e0c6",
+    "description": "Clarity score 5/5"
+  }
+]
