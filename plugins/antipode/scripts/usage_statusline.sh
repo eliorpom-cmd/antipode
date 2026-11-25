@@ -1,6 +1,6 @@
 #!/bin/sh
 # Status line wrapper for Claude Code.
-# Claude Code sends session JSON on stdin, including rate_limits for Pro/Max plans.
+# Claude Code sends session JSON on stdin, including rate_limits for Pro, Max and Ultra plans.
 # A skill cannot read that stream, so this wrapper caches rate_limits to a file
 # the skill can read, then hands the same JSON to the user's previous status line.
 #

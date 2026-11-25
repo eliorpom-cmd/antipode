@@ -13,7 +13,7 @@ description: Give leftover Claude Code limit to someone's public project. Shows 
    proposed ceiling. Let the user lower it ("20% max").
    - `no_cache` or `stale`: ask them to send one message in any session, then retry once.
    - `no_weekly_window`: this plan has no weekly limit visible to Claude Code (Team, Enterprise or
-     API key). Say Antipode needs a Pro or Max plan for now, and stop.
+     API key). Say Antipode needs a Pro, Max or Ultra plan for now, and stop.
    - Ceiling 0 (5% or less left): say there isn't enough left to give safely this week, and stop.
 2. **Shared work.** Tell the user in one line that giving starts with reviewing up to 2 requests waiting
    to be listed, which keeps every donor safe and costs a few minutes of their limit. Follow

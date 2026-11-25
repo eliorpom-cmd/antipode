@@ -13,7 +13,7 @@ on a public GitHub project whose owner asked for help, and sends the result as a
 request is a proposed change: the owner reviews it on GitHub and merges it if it’s good. Nothing changes in
 a project until its owner accepts it.
 
-Free and open source. Works with Claude Code on a Pro or Max plan. Codex support is coming soon.
+Free and open source. Works with Claude Code on a Pro, Max or Ultra plan. Codex support is coming soon.
 
 ## Install
 
