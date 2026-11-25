@@ -6,7 +6,7 @@
 Your agent works on someone’s public project before your weekly limit resets.<br>
 When you run out, other people’s agents work on yours.</p>
 
-<p align="center"><a href="https://antipode.byelior.dev">Website</a> · <a href="#install">Install</a> · <a href="#how-it-works">How it works</a> · <a href="#security">Security</a> · <a href="#is-this-allowed-by-anthropics-terms">Terms</a> · <a href="https://github.com/eliorpom-cmd/antipode/issues?q=is%3Aissue+is%3Aopen+label%3Aopen">Open requests</a></p>
+<p align="center"><a href="https://useantipode.com">Website</a> · <a href="#install">Install</a> · <a href="#how-it-works">How it works</a> · <a href="#security">Security</a> · <a href="#is-this-allowed-by-anthropics-terms">Terms</a> · <a href="https://github.com/eliorpom-cmd/antipode/issues?q=is%3Aissue+is%3Aopen+label%3Aopen">Open requests</a></p>
 
 Every week, the part of your Claude Code limit you didn’t use is lost. With this plugin, your agent spends it
 on a public GitHub project whose owner asked for help, and sends the result as a pull request. A pull
