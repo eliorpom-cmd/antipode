@@ -33,7 +33,7 @@ Show exactly this block (fill `<login>`), then nothing else in that message but 
   YOU HAVE LIMIT LEFT            YOU RAN OUT
   /antipode:give                 /antipode:ask
   1. Review 2 requests (safety)  1. Your agent plans the work
-  2. Pick 1 of 5 projects        2. You answer every choice once
+  2. Pick 1 of 5, or let Claude  2. You answer every choice once
   3. A cloud session does it,    3. A donor's agent does it and
      opens a pull request,          sends you a pull request
      stops at the share you set

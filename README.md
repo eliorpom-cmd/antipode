@@ -45,7 +45,7 @@ Start with `/antipode:start`: it checks your setup and suggests a first step.
 |---|---|
 | Run `/antipode:give`. | In your public repository, run `/antipode:ask`. |
 | Your agent first reviews up to 2 requests waiting to be listed: the shared work that keeps everyone safe, a few minutes of your limit. | Your agent reads the code, writes a plan, and asks you every choice the work could meet, all at once. The donor’s session runs alone and can’t ask anything, so nothing is left open. |
-| It shows what’s left of your week, then 5 open requests. You pick one. | The request is posted here as an issue and reviewed before it’s listed. |
+| It shows what’s left of your week, then 5 open requests. You pick one, or say “pick for me”. | The request is posted here as an issue and reviewed before it’s listed. |
 | A cloud session does the work with the model the owner asked for, opens the pull request, and stops at the share of your limit you set. You can close your laptop. | GitHub notifies you when a donor takes it, if their agent has a question, and when the pull request arrives. Have your own agent review it before you merge. |
 
 Work that doesn’t fit in 5 hours is split into several requests. If a donor runs out halfway, their agent

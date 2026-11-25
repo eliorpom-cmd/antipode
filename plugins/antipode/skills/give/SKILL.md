@@ -1,6 +1,6 @@
 ---
 name: give
-description: Give leftover Claude Code limit to someone's public project. Shows 5 open requests, the user picks one, and a cloud session does the work and opens a pull request. Use when the user has limit left before the weekly reset, says "give", "donate my credit", "I have credit left", or asks what to do with unused limit.
+description: Give leftover Claude Code limit to someone's public project. Shows 5 open requests, the user picks one (or lets Claude pick), and a cloud session does the work and opens a pull request. Use when the user has limit left before the weekly reset, says "give", "donate my credit", "I have credit left", or asks what to do with unused limit.
 ---
 
 # Give leftover limit
@@ -25,9 +25,12 @@ description: Give leftover Claude Code limit to someone's public project. Shows 
    PY ROOT/scripts/shortlist.py --issues "$T/issues.json" --stats "$T/stats.json" \
      --donor "$(gh api user --jq .login)" --agent claude --ceiling <pct>
    ```
-   If a `gh` command fails, show its error and stop. Show the (up to) 5 results as a numbered list:
-   pitch, goal in one line, size, model, and "continues someone's work" for relays. Wait for a number,
-   or "more" to draw again. An empty list: say nothing fits right now, and that `/antipode:ask` on one of
+   If a `gh` command fails, show its error and stop. If the user asked you to choose ("pick for me",
+   "you choose", `/antipode:give auto`), take result 1 (the shortlist already ranks relays first, then
+   clear requests), say in one line which one and why, and go on. Otherwise show the (up to) 5 results as
+   a numbered list: pitch, goal in one line, size, model, and "continues someone's work" for relays, with
+   a last line "or say: pick for me". Wait for a number, "pick for me", or "more" to draw again.
+   An empty list: say nothing fits right now, and that `/antipode:ask` on one of
    their own public repositories is the other way to use Antipode today.
 4. **Claim.** Comment `/claim` on the issue (`gh issue comment <n> -R $C --body "/claim"`; if this
    fails, show the error and stop). Wait up to 2 minutes for the bot's answer
