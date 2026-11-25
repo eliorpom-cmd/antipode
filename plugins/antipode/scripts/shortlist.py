@@ -48,10 +48,8 @@ def languages(issue):
     return {name[5:] for name in labels_of(issue) if name.startswith("lang:")}
 
 
-def weight(issue, stats, now, prefer=()):
+def weight(issue, stats, now):
     w = float(clarity(labels_of(issue)))
-    if languages(issue) & set(prefer):
-        w *= 1.5  # same stack as the donor's current work: their session starts with useful context
     author = issue["author"]["login"]
     last = (stats.get("people", {}).get(author) or {}).get("last_donation_at")
     if last and now - parse_time(last) <= 30 * DAY:
@@ -91,13 +89,13 @@ def weighted_order(items, weights, rng):
     return [item for _, item in sorted(keyed, key=lambda pair: pair[0], reverse=True)]
 
 
-def draw(issues, stats, donor, agent, ceiling, now, rng, prefer=()):
+def draw(issues, stats, donor, agent, ceiling, now, rng):
     candidates = list(eligible(issues, donor, agent, ceiling))
     relays = [c for c in candidates if "relay" in labels_of(c[0])]
     fresh = [c for c in candidates if "relay" not in labels_of(c[0])]
     ordered = []
     for group in (relays, fresh):
-        ordered += weighted_order(group, [weight(c[0], stats, now, prefer) for c in group], rng)
+        ordered += weighted_order(group, [weight(c[0], stats, now) for c in group], rng)
     picked, requesters = [], set()
     for issue, request in ordered:
         author = issue["author"]["login"].lower()
@@ -114,7 +112,6 @@ def draw(issues, stats, donor, agent, ceiling, now, rng, prefer=()):
             "model": request.get("model"),
             "relay": "relay" in labels_of(issue),
             "languages": sorted(languages(issue)),
-            "matches_your_stack": bool(languages(issue) & set(prefer)),
         })
         if len(picked) == SLOTS:
             break
@@ -128,7 +125,6 @@ def main():
     parser.add_argument("--donor", required=True, help="donor's GitHub login")
     parser.add_argument("--agent", choices=("claude", "codex"), required=True)
     parser.add_argument("--ceiling", type=float, required=True, help="%% of weekly limit")
-    parser.add_argument("--prefer", default="", help="comma-separated languages of the donor's work, e.g. swift,typescript")
     parser.add_argument("--seed", type=int)
     parser.add_argument("--now", type=float)
     args = parser.parse_args()
@@ -150,8 +146,7 @@ def main():
         print("[]")
         return
     now = args.now or datetime.now(timezone.utc).timestamp()
-    prefer = tuple(filter(None, (language_slug(x) for x in args.prefer.split(","))))
-    picked = draw(issues, stats, args.donor, args.agent, args.ceiling, now, random.Random(args.seed), prefer)
+    picked = draw(issues, stats, args.donor, args.agent, args.ceiling, now, random.Random(args.seed))
     print(json.dumps(picked, indent=2, ensure_ascii=False))
 
 

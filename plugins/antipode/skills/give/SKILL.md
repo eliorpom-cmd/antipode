@@ -23,17 +23,12 @@ description: Give leftover Claude Code limit to someone's public project. Shows 
    gh issue list -R $C --state open --limit 200 --json number,title,body,labels,createdAt,author > "$T/issues.json"
    gh api repos/$C/contents/stats.json -H "Accept: application/vnd.github.raw" > "$T/stats.json"
    PY ROOT/scripts/shortlist.py --issues "$T/issues.json" --stats "$T/stats.json" \
-     --donor "$(gh api user --jq .login)" --agent claude --ceiling <pct> --prefer "<languages>"
+     --donor "$(gh api user --jq .login)" --agent claude --ceiling <pct>
    ```
-   `<languages>`: the stack the user works in, so their session starts with useful context. If the
-   current folder is a GitHub repository: `gh repo view --json languages --jq '[.languages[].node.name]|join(",")'`;
-   otherwise the primary languages of their 5 most recently pushed repositories
-   (`gh repo list --limit 5 --json primaryLanguage --jq '[.[].primaryLanguage.name]|unique|join(",")'`).
-   Mark results with `matches_your_stack` as "same stack as you".
    If a `gh` command fails, show its error and stop. If the user asked you to choose ("pick for me",
    "you choose", `/antipode:give auto`), take result 1 (the shortlist already ranks relays first, then
    clear requests), say in one line which one and why, and go on. Otherwise show the (up to) 5 results as
-   a numbered list: pitch, goal in one line, size, model, and "continues someone's work" for relays, with
+   a numbered list: pitch, goal in one line, language, size, model, and "continues someone's work" for relays, with
    a last line "or say: pick for me". Wait for a number, "pick for me", or "more" to draw again.
    An empty list: say nothing fits right now, and that `/antipode:ask` on one of
    their own public repositories is the other way to use Antipode today.
