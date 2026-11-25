@@ -44,7 +44,8 @@ Code from a target repository never runs on your computer. It runs only inside t
   attached.
 
 **Fake reviewers, griefing, forged state.**
-- Reviewing, taking and flagging need a GitHub account older than 90 days. Nobody can review or take
+- Posting a request needs a GitHub account older than 30 days; reviewing, taking and flagging need one
+  older than 90 days. Nobody can review or take
   their own request, and a donor holds one request at a time.
 - The bot's state lives in hidden records that count only when written by the bot and placed at the end
   of its own comment. Text from users that the bot repeats is escaped, so it can't create a record.

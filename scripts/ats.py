@@ -103,6 +103,7 @@ REVIEWS_NEEDED = 2
 # and flagging need an account this old. At least one approval must come from a trusted reviewer
 # (a maintainer, or a donor with a merged pull request for someone else).
 MIN_ACCOUNT_AGE_DAYS = 90
+MIN_REQUESTER_AGE_DAYS = 30  # throwaway accounts can't flood the queue with requests
 MAX_TOKENS = 50_000_000  # self-reported per comment; anything above is a typo or a lie
 RELAY_RE = re.compile(r"^([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))/([A-Za-z0-9._-]{1,100}):(claude/ats-\d+)$")
 REFUSE_KINDS = ("security", "policy", "unclear")
@@ -575,6 +576,10 @@ def cmd_scan(args):
     found = problems(request)
     report = {"issue": args.issue, "request": request, "problems": found, "risky": [], "sha": None}
     author = issue["author"]["login"]
+    info = None
+    maintainer = author.lower() == os.environ.get("GITHUB_REPOSITORY_OWNER", "").lower()
+    if not maintainer and time.time() - account_created_at(author) < MIN_REQUESTER_AGE_DAYS * 86400:
+        found.append(f"posting a request needs a GitHub account older than {MIN_REQUESTER_AGE_DAYS} days")
     if not found:
         info = gh_json("api", f"repos/{request['repo']}", check=False)
         # A private or missing repository answers {"message": "Not Found"}, not an error exit
@@ -612,13 +617,24 @@ def cmd_scan(args):
                                           reply=record_comment(text, {"event": "scan_failed", "at": int(time.time())})))
     else:
         risky = "\n".join(f"- {r}" for r in report["risky"]) or "- none"
-        apply_plan(args.issue, empty_plan(reply=record_comment(
+        # Tag the request with the target's language, so donors' shortlists can favour their own stack.
+        lang = language_label((info or {}).get("language"))
+        old = [l["name"] for l in issue["labels"] if l["name"].startswith("lang:") and l["name"] != lang]
+        if lang:
+            gh("label", "create", lang, "-R", repo(), "--color", "ededed", "--force", check=False)
+        apply_plan(args.issue, empty_plan(remove=old, reply=record_comment(
             f"Automatic checks passed on commit `{report['sha']}`. Waiting for {REVIEWS_NEEDED} donors’ agents to review it.\n\n"
             f"Files that run on install, build or by agents, to read first:\n{risky}",
             {"event": "scan_ok", "sha": report["sha"], "repo": request["repo"], "base": request["base"],
              "body_hash": body_hash(issue["body"]), "risky": [safe(r, 200) for r in report["risky"][:50]],
-             "at": int(time.time())}), add=["review"]))
+             "at": int(time.time())}), add=["review"] + ([lang] if lang else [])))
     print(json.dumps({"ok": not found}))
+
+
+def language_label(language):
+    """GitHub's primary language as a label donors' shortlists can match: "C++" → "lang:c++"."""
+    slug = re.sub(r"[^a-z0-9+#.-]+", "-", (language or "").lower()).strip("-")
+    return f"lang:{slug}"[:50] if slug else None
 
 
 def is_org_member(owner, login):

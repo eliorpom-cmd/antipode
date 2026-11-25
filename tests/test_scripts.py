@@ -187,6 +187,25 @@ class ShortlistTest(unittest.TestCase):
         self.assertGreater(firsts.count(1), 150)
 
 
+class StackPreferenceTest(unittest.TestCase):
+    def test_same_stack_ranks_higher(self):
+        swift = issue(1, "alice", ["open", "clarity:3", "lang:swift"])
+        rust = issue(2, "bob", ["open", "clarity:3", "lang:rust"])
+        firsts = [shortlist.draw([swift, rust], {}, "donor", "claude", 50, NOW, random.Random(s), ("swift",))[0]["number"]
+                  for s in range(200)]
+        self.assertGreater(firsts.count(1), firsts.count(2))
+        picked = shortlist.draw([swift], {}, "donor", "claude", 50, NOW, random.Random(1), ("swift",))[0]
+        self.assertTrue(picked["matches_your_stack"])
+        self.assertEqual(picked["languages"], ["swift"])
+
+    def test_language_slug_matches_bot_label(self):
+        sys.path.insert(0, os.path.join(ROOT, "scripts"))
+        import ats
+        for name in ("C++", "Jupyter Notebook", "TypeScript", "C#"):
+            self.assertEqual(ats.language_label(name), "lang:" + shortlist.language_slug(name))
+        self.assertIsNone(ats.language_label(None))
+
+
 class ReadUsageTest(unittest.TestCase):
     def test_ceiling_and_staleness(self):
         cache = {"captured_at": NOW - 60, "rate_limits": {"seven_day": {"used_percentage": 72.4, "resets_at": NOW + 7200}}}
