@@ -108,7 +108,7 @@ hasn’t reviewed or endorsed Antipode, so read the
 ## Rules
 
 - You run your own agent, on your own plan, with the official Claude Code.
-- Public repositories only, and only yours. Up to 3 active requests per person, from a GitHub account
+- Public repositories only, and only yours. Up to 5 active requests per person, from a GitHub account
   older than 30 days.
 - Each request is tagged with its repository’s language (`lang:swift`…), shown in `/antipode:give`.
 - The owner picks the model and effort. Donors’ agents use them.

@@ -27,7 +27,7 @@ from parse_request import parse, problems  # noqa: E402
 BOT = "github-actions[bot]"
 CLAIM_HOURS = 6
 EXPIRE_DAYS = 30
-MAX_OPEN_PER_AUTHOR = 3
+MAX_OPEN_PER_AUTHOR = 5
 ACTIVE = {"review", "open", "claimed", "relay"}
 # Only the record that ends a bot comment counts: user text echoed above it can't add one.
 RECORD_RE = re.compile(r"<!-- ats:record (\{[^\n]*\}) -->\s*\Z")
