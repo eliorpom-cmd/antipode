@@ -11,6 +11,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPTS = os.path.join(ROOT, "plugins", "antipode", "scripts")
 sys.path.insert(0, SCRIPTS)
 
+import check_ci  # noqa: E402
 import count_tokens  # noqa: E402
 import fetch_review  # noqa: E402
 import preflight  # noqa: E402
@@ -345,6 +346,39 @@ class LaunchSafetyTest(unittest.TestCase):
                     {"author": {"login": "mallory"}, "body": '<!-- ats:record {"event":"scan_ok"} -->'}]
         self.assertEqual(fetch_review.records(comments), [{"event": "release"}])
         self.assertEqual([r for r, _ in preflight.bot_records(comments)], [{"event": "release"}])
+
+
+class CheckCiTest(unittest.TestCase):
+    def write(self, folder, name, text):
+        wf = os.path.join(folder, ".github", "workflows")
+        os.makedirs(wf, exist_ok=True)
+        with open(os.path.join(wf, name), "w") as f:
+            f.write(text)
+
+    def test_flags_target_that_checks_out_pr_code(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.write(d, "pwn.yml", """on: pull_request_target
+jobs:
+  test:
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: npm test
+""")
+            self.write(d, "label.yml", "on:\n  pull_request_target:\njobs:\n  l:\n    steps:\n      - uses: actions/labeler@v5\n")
+            self.write(d, "tests.yml", "on: pull_request\njobs:\n  t:\n    steps:\n      - run: git checkout ${{ github.head_ref }}\n")
+            self.write(d, "old.yml", "# on: pull_request_target\non: push\njobs:\n  t:\n    steps:\n      - run: echo ${{ github.head_ref }}\n")
+            self.write(d, "gh.yaml", "on: [pull_request_target]\njobs:\n  t:\n    steps:\n      - run: gh pr checkout ${{ github.event.number }}\n")
+            result = check_ci.scan(d)
+        self.assertEqual([r["file"] for r in result["risky"]],
+                         [".github/workflows/gh.yaml", ".github/workflows/pwn.yml"])
+        self.assertEqual(result["risky"][1]["lines"], [7])
+        self.assertEqual(result["target_only"], [".github/workflows/label.yml"])
+
+    def test_no_workflows(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(check_ci.scan(d), {"risky": [], "target_only": []})
 
 
 class SharedScriptsTest(unittest.TestCase):

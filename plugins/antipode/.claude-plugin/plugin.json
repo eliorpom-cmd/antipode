@@ -1,6 +1,6 @@
 {
   "name": "antipode",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Share your unused Claude Code limits: your agent works on someone's public project before your weekly limit resets, and other people's agents work on yours when you run out.",
   "author": {
     "name": "Elior",

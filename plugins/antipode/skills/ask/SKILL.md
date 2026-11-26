@@ -23,6 +23,16 @@ user, and written into the request. A request that leaves a choice open wastes s
   `gh repo edit --add-topic antipode` if they are an admin; otherwise stop and say who must add it.
 - A fork: say pull requests will go to the fork, not to the original project.
 
+Then check the repository's CI: `PY ROOT/scripts/check_ci.py` at the repository root.
+- `risky` not empty: a workflow runs on `pull_request_target`, which has the repository's secrets
+  and runs on every pull request from a fork, whatever the approval settings say, and it checks out
+  the pull request's code (lines given). Anyone who opens a pull request, a donor or not, can then
+  read those secrets. Tell the user in plain words, show the lines, and give the fix: run builds
+  and tests of pull request code on `pull_request` (no secrets), and keep `pull_request_target`
+  only for jobs that never check out or run that code (labels, comments). Recommend fixing it
+  before posting and offer to make the change. If they decline, go on: it is their repository.
+- `target_only` not empty: say nothing, these workflows don't run the pull request's code.
+
 ## 2. Understand the work
 
 From the conversation and the code, work out the goal and what "done" looks like. Read the files
