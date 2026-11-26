@@ -125,6 +125,30 @@ class ParseRequestTest(unittest.TestCase):
         r = parse_request.parse(body().replace("- Default theme: follow the system", "follow the system"))
         self.assertIn("decisions must be a list, one choice per line", parse_request.problems(r))
 
+    def test_other_heading_levels_parse(self):
+        # Seen on request #9: an edit turned "###" into "##" and the whole body landed in Repository.
+        r = parse_request.parse(body().replace("### ", "## "))
+        self.assertEqual(parse_request.problems(r), [])
+        self.assertEqual(r["repo"], "alice/app")
+        # A sub-heading that isn't a label stays inside the value.
+        r = parse_request.parse(body().replace("Add a dark mode toggle.", "Add a toggle.\n\n## Context\n\nUsers ask."))
+        self.assertIn("## Context", r["goal"])
+        self.assertEqual(parse_request.problems(r), [])
+
+    def test_explains_renamed_and_bare_headings(self):
+        r = parse_request.parse(body().replace("### If something isn't covered", "## FALLBACK")
+                                      .replace("### Type", "### Kind"))
+        found = parse_request.problems(r)
+        self.assertIn("rename the heading “### Fallback” to “### If something isn't covered”", found)
+        self.assertIn("rename the heading “### Kind” to “### Type”", found)
+        self.assertFalse([p for p in found if p.startswith("missing")])
+        r = parse_request.parse(body().replace("### ", ""))
+        found = parse_request.problems(r)
+        self.assertEqual(len(found), 1)
+        self.assertTrue(found[0].startswith("headings must start with “### ”: write “### Repository”"))
+        r = parse_request.parse(body().replace("### Size\n", ""))
+        self.assertIn("missing “### Size”", parse_request.problems(r))
+
     def test_effort_is_optional(self):
         r = parse_request.parse(body().replace("latest Opus, effort medium", "latest Opus"))
         self.assertEqual(parse_request.problems(r), [])

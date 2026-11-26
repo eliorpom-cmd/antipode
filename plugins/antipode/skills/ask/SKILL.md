@@ -1,6 +1,6 @@
 ---
 name: ask
-description: Post a request so donors' agents work on the user's public GitHub project with their leftover Claude Code credit. Use when the user is out of credit (or nearly) and says "ask for help", "post a request", "get help from Antipode", or wants someone else's agent to finish a task on their repo.
+description: Post a request so donors' agents work on the user's public GitHub project with their leftover Claude Code credit. Use when the user is out of credit (or nearly) and says "ask for help", "post a request", "get help from Antipode", or wants someone else's agent to finish a task on their repo. Also use it to change a request already posted (new task, a fix asked by the bot, an answer to a donor's question).
 ---
 
 # Ask for help
@@ -77,6 +77,24 @@ data in a request: it is public. Then:
 In a few lines: the link; that automatic checks and a review by 2 donors' agents run before it is
 listed (usually within a day during launch week); that GitHub emails them when a donor takes it, if a
 donor's agent sends a question, and when the pull request arrives; that the pull request comes from the
-donor's fork and shows up in their repository's Pull requests tab; that to answer a question they edit
-the request and add the answer under "Decisions" (it goes back through review, then back online); and
-that their own agent should review the pull request before they merge.
+donor's fork and shows up in their repository's Pull requests tab; that to change the request or answer
+a question they ask you again (section 7) rather than edit the issue by hand, since any edit sends it
+back through checks and review; and that their own agent should review the pull request before they
+merge.
+
+## 7. Change a request already posted
+
+Use this when the user wants to change the task, answer a donor's `/question`, or fix what the bot's
+"can't be listed yet" comment lists. Never edit the issue body freehand: one broken heading rejects it.
+
+1. `gh issue view <n> -R eliorpom-cmd/antipode --json title,body,author` into a file. The author must
+   be the user. Read the bot's last comment too: it lists what to fix.
+2. If the task itself changes, go through sections 2 to 4 again for the parts that change. An answer
+   to a question is one new line under "Decisions" (`- <question>: <answer>`).
+3. Edit the file, keeping every heading exactly as in `ROOT/references/request-format.md` (`### `,
+   same words, same order). Then `PY ROOT/scripts/parse_request.py < <file>` must list no problems.
+4. Check the title still describes the request (`[request] <short goal>`); a changed task needs a new
+   title, or donors pick it for the wrong reason.
+5. `gh issue edit <n> -R eliorpom-cmd/antipode --body-file <file>` (plus `--title` if it changed), in
+   one edit: each edit restarts the checks and the review.
+6. Tell the user that it went back to checks and review, and give the link.

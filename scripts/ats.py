@@ -22,7 +22,7 @@ import time
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from parse_request import parse, problems  # noqa: E402
+from parse_request import FORMAT_URL, parse, problems  # noqa: E402
 
 BOT = "github-actions[bot]"
 CLAIM_HOURS = 6
@@ -612,7 +612,10 @@ def cmd_scan(args):
         json.dump(report, f, indent=2)
     if found:
         text = "This request can't be listed yet:\n" + "\n".join(f"- {p}" for p in found)
-        text += "\n\nEdit the issue to fix it; the checks run again."
+        text += ("\n\nEdit the issue to fix it; the checks run again. Keep the headings of the form exactly"
+                 f" ({FORMAT_URL}). If an agent edits it, have it run `scripts/parse_request.py` on the new body"
+                 " first: it lists these same problems (`/antipode:ask` does this). If the task changed, change"
+                 " the title too.")
         apply_plan(args.issue, empty_plan(add=["rejected"], remove=["review"],
                                           reply=record_comment(text, {"event": "scan_failed", "at": int(time.time())})))
     else:
@@ -676,7 +679,8 @@ def cmd_intake(args):
         remove = ["open", "rejected", "claimed", "question", "expired"] + [f"clarity:{n}" for n in range(1, 6)]
         apply_plan(args.issue, empty_plan(
             add=["review"], remove=remove, unassign=[a["login"] for a in issue["assignees"]],
-            reply=record_comment("Edited: back to the automatic checks and review. Donors work only from a reviewed version.",
+            reply=record_comment("Edited: back to the automatic checks and review. Donors work only from a reviewed version."
+                                 "\n\nIf the task itself changed, change the title too: donors pick requests by their title.",
                                  {"event": "edited", "at": int(time.time())})))
     cmd_scan(args)
 
