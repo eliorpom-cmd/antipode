@@ -446,6 +446,12 @@ class HarvestTest(unittest.TestCase):
         self.assertIsNone(ats.harvest_candidate(self.issue(), self.recs(claim_at=NOW - 13 * 3600), NOW))
         self.assertIsNone(ats.harvest_candidate(self.issue(("delivered",)), self.recs(), NOW))
 
+    def test_pr_body_keeps_the_donor_credited(self):
+        body = ats.pr_body(ats.parse_status(self.DELIVERED), "https://github.com/x/y/issues/6", "bob", 6)
+        self.assertIn("## What changed", body)
+        self.assertIn("Rebase and merge", body)
+        self.assertIn("@bob", body)
+
     def test_note_goes_before_the_record(self):
         reply = ats.record_comment("Partly done.", {"event": "relay"})
         out = ats.with_note(reply, "## Left\n- tests <b>")

@@ -882,7 +882,10 @@ def pr_body(status, issue_url, donor, issue):
     note = status["body"][:6000] or "No description."
     return (f"{note}\n\n---\n"
             f"Antipode request: {issue_url}\n"
-            f"Tokens given by @{donor}. Opened by the Antipode bot from `{donor}:claude/ats-{issue}`.")
+            f"Tokens given by @{donor}. Opened by the Antipode bot from `{donor}:claude/ats-{issue}`.\n\n"
+            # A squash merge is authored by whoever opened the pull request: the bot, not the donor.
+            f"To keep @{donor} as the commit author, merge with **Rebase and merge** or **Create a merge "
+            f"commit**. **Squash and merge** credits the Antipode bot, with @{donor} as co-author.")
 
 
 def with_note(reply, note):
