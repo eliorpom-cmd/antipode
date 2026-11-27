@@ -1,10 +1,32 @@
 {
-  "generated_at": "2026-11-27T02:51:10.331028+00:00",
-  "people": {},
+  "generated_at": "2026-11-27T09:04:57.530910+00:00",
+  "people": {
+    "d3xter1z": {
+      "delivered": 4,
+      "donated_tokens": 2135984,
+      "last_donation_at": "2026-11-27T08:06:55+00:00",
+      "merged": 4,
+      "received_tokens": 0
+    },
+    "eliorpom-cmd": {
+      "delivered": 0,
+      "donated_tokens": 0,
+      "last_donation_at": null,
+      "merged": 0,
+      "received_tokens": 2642005
+    },
+    "twistedwhitebranch": {
+      "delivered": 1,
+      "donated_tokens": 506021,
+      "last_donation_at": "2026-11-27T08:24:25+00:00",
+      "merged": 1,
+      "received_tokens": 0
+    }
+  },
   "totals": {
-    "delivered": 0,
-    "donated_tokens": 0,
-    "merged": 0,
+    "delivered": 5,
+    "donated_tokens": 2642005,
+    "merged": 5,
     "requests": 7
   }
 }
