@@ -896,7 +896,9 @@ def pr_body(status, issue_url, donor, issue):
     request = f"[Antipode request #{issue}]({issue_url})"
     # A squash merge is authored by the bot, which opened the pull request, with the donor as
     # co-author: a solo project lists one Antipode contributor, not every donor.
-    return (f"> {who}’s agent did this for your {request}.\n\n"
+    return (f"> {who}’s agent did this for your {request}. Its session has ended and nobody reads "
+            "comments here: merge it, change it yourself, or close it. For more work, post a new request "
+            "with `/antipode:ask`.\n\n"
             f"{note}\n\n---\n\n"
             f"**Made with [Antipode]({SITE}).** {who} gave their unused Claude Code limit to this "
             f"project. Their agent did the work in a cloud session, from the {request}, and "

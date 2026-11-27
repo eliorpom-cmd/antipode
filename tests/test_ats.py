@@ -453,6 +453,7 @@ class HarvestTest(unittest.TestCase):
                                         "[Antipode request #6](https://github.com/x/y/issues/6)."))
         self.assertIn("Made with [Antipode](https://useantipode.com/", body)
         self.assertNotRegex(body, r"(?<![\w`/])@bob")
+        self.assertIn("nobody reads comments here", body.split("\n")[0])
 
     def test_pr_body_pings_nobody(self):
         status = ats.parse_status("t\n\nThanks @alice and @bob-2, see a@b.com and `@carol`.\n\n"
