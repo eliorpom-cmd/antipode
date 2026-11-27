@@ -878,13 +878,22 @@ def harvest_candidate(issue, recs, now):
     return last.get("donor"), listed[-1], last.get("at") or 0
 
 
+SITE = "https://useantipode.com/?utm_source=github&utm_medium=pull-request"
+
+
 def pr_body(status, issue_url, donor, issue):
+    """The session's description, then a footer that says how the pull request came to be. The
+    footer is the same on every bot pull request, so a search for "Made with Antipode" finds them."""
     note = status["body"][:6000] or "No description."
-    return (f"{note}\n\n---\n"
-            f"Antipode request: {issue_url}\n"
-            # A squash merge is authored by the bot, which opened the pull request, with the donor as
-            # co-author: a solo project lists one Antipode contributor, not every donor.
-            f"Tokens given by @{donor}. Opened by the Antipode bot from `{donor}:claude/ats-{issue}`.")
+    # A squash merge is authored by the bot, which opened the pull request, with the donor as
+    # co-author: a solo project lists one Antipode contributor, not every donor.
+    return (f"{note}\n\n---\n\n"
+            f"**Made with [Antipode]({SITE}).** @{donor} gave their unused Claude Code limit to this "
+            f"project. Their agent did the work in a cloud session, from the [request]({issue_url}), and "
+            f"the Antipode bot opened this pull request from `{donor}:claude/ats-{issue}`.\n\n"
+            "How it works: owners of public repositories post what they need with `/antipode:ask`. People "
+            "with Claude Code limit left before their weekly reset run `/antipode:give`, and their agent "
+            "takes a request. Free and open source: https://github.com/eliorpom-cmd/antipode\n")
 
 
 def with_note(reply, note):

@@ -105,14 +105,12 @@ Closes the Antipode request <link to the issue>.
 ## Agent
 Claude Code, <model id>, <effort>. Tokens used: <number>.
 
-This pull request was written by an AI agent for the Antipode project.
-
 Antipode-Status: delivered
 Antipode-Tokens: <number>
 ```
 
-The bot opens the pull request from that branch with the message body as its description, credits
-the donor, and posts the link on the request.
+The bot opens the pull request from that branch with the message body as its description, adds a
+"Made with Antipode" footer that credits the donor, and posts the link on the request.
 
 The other outcomes use the same commit, with a shorter message:
 

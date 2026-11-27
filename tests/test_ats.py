@@ -450,6 +450,8 @@ class HarvestTest(unittest.TestCase):
         body = ats.pr_body(ats.parse_status(self.DELIVERED), "https://github.com/x/y/issues/6", "bob", 6)
         self.assertIn("## What changed", body)
         self.assertIn("@bob", body)
+        self.assertIn("Made with [Antipode](https://useantipode.com/", body)
+        self.assertIn("https://github.com/x/y/issues/6", body)
 
     def test_note_goes_before_the_record(self):
         reply = ats.record_comment("Partly done.", {"event": "relay"})
