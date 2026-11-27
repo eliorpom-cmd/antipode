@@ -449,9 +449,20 @@ class HarvestTest(unittest.TestCase):
     def test_pr_body_keeps_the_donor_credited(self):
         body = ats.pr_body(ats.parse_status(self.DELIVERED), "https://github.com/x/y/issues/6", "bob", 6)
         self.assertIn("## What changed", body)
-        self.assertIn("@bob", body)
+        self.assertTrue(body.startswith("> [bob](https://github.com/bob)’s agent did this for your "
+                                        "[Antipode request #6](https://github.com/x/y/issues/6)."))
         self.assertIn("Made with [Antipode](https://useantipode.com/", body)
-        self.assertIn("https://github.com/x/y/issues/6", body)
+        self.assertNotRegex(body, r"(?<![\w`/])@bob")
+
+    def test_pr_body_pings_nobody(self):
+        status = ats.parse_status("t\n\nThanks @alice and @bob-2, see a@b.com and `@carol`.\n\n"
+                                  "Antipode-Status: delivered")
+        body = ats.pr_body(status, "https://github.com/x/y/issues/6", "bob", 6)
+        self.assertIn("`@alice`", body)
+        self.assertIn("`@bob-2`", body)
+        self.assertIn("a@b.com", body)
+        self.assertIn("`@carol`", body)
+        self.assertNotIn("``", body)
 
     def test_note_goes_before_the_record(self):
         reply = ats.record_comment("Partly done.", {"event": "relay"})

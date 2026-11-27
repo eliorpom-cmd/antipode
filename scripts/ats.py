@@ -879,17 +879,27 @@ def harvest_candidate(issue, recs, now):
 
 
 SITE = "https://useantipode.com/?utm_source=github&utm_medium=pull-request"
+MENTION_RE = re.compile(r"(?<![\w`/])@([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))")
+
+
+def no_mentions(text):
+    """`@name` in backticks: GitHub shows it but notifies nobody. A bot pull request must not ping."""
+    return MENTION_RE.sub(r"`@\1`", text)
 
 
 def pr_body(status, issue_url, donor, issue):
-    """The session's description, then a footer that says how the pull request came to be. The
-    footer is the same on every bot pull request, so a search for "Made with Antipode" finds them."""
-    note = status["body"][:6000] or "No description."
+    """A one-line context, the session's description, then a footer that says how the pull request
+    came to be. The footer is the same on every bot pull request, so a search for "Made with
+    Antipode" finds them. People are linked, never @mentioned: nobody gets a notification from it."""
+    note = no_mentions(status["body"][:6000]) or "No description."
+    who = f"[{donor}](https://github.com/{donor})"
+    request = f"[Antipode request #{issue}]({issue_url})"
     # A squash merge is authored by the bot, which opened the pull request, with the donor as
     # co-author: a solo project lists one Antipode contributor, not every donor.
-    return (f"{note}\n\n---\n\n"
-            f"**Made with [Antipode]({SITE}).** @{donor} gave their unused Claude Code limit to this "
-            f"project. Their agent did the work in a cloud session, from the [request]({issue_url}), and "
+    return (f"> {who}’s agent did this for your {request}.\n\n"
+            f"{note}\n\n---\n\n"
+            f"**Made with [Antipode]({SITE}).** {who} gave their unused Claude Code limit to this "
+            f"project. Their agent did the work in a cloud session, from the {request}, and "
             f"the Antipode bot opened this pull request from `{donor}:claude/ats-{issue}`.\n\n"
             "How it works: owners of public repositories post what they need with `/antipode:ask`. People "
             "with Claude Code limit left before their weekly reset run `/antipode:give`, and their agent "
