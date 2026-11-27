@@ -62,7 +62,7 @@ description: Give leftover Claude Code limit to someone's public project. Shows 
    if the branch already exists, `gh api -X PATCH repos/<fork>/git/refs/heads/claude/ats-<n> -f sha=<relay_sha> -F force=true`.
    Never run the target repository's code on the user's machine.
 8. **Launch in the cloud.** Create a one-off cloud routine that runs now (RemoteTrigger `create`, then
-   `run`), with the model `model` from preflight, the repositories in `sources` (the fork and
+   `run`), named `routine_name` from preflight, with the model `model` from preflight, the repositories in `sources` (the fork and
    eliorpom-cmd/antipode, nothing else), and two messages in this order: `/effort <effort>` (skip it
    when effort is null), then the content of `prompt_file`. Routines have no effort field, but a
    `/effort` first message applies to the whole session. Two settings keep the session away from
@@ -80,4 +80,5 @@ description: Give leftover Claude Code limit to someone's public project. Shows 
    If anything in this step fails, comment `/release <what failed>` so the request doesn't stay locked.
 9. **Hand off.** Tell the user they can leave: the session link, the dollar ceiling, and that the
    result will appear on the request (link) within 10 minutes of the session's last push, posted by
-   the Antipode bot, which also opens the pull request and credits them.
+   the Antipode bot, which also opens the pull request and credits them. If notifications are on in
+   their Claude app, their phone shows "Antipode #<n>: …" when the session ends.

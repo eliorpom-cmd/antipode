@@ -360,6 +360,7 @@ class LaunchSafetyTest(unittest.TestCase):
         self.assertNotRegex(prompt, r"\{[a-z_]+\}")
         self.assertNotIn("GitHub tools (", prompt)
         self.assertIn("curl -s https://api.github.com/", prompt)
+        self.assertIn("Antipode #9:", prompt)
 
     def test_session_gets_no_github_tools(self):
         for name in ("mcp__github__*", "mcp__claude-code-remote__*"):

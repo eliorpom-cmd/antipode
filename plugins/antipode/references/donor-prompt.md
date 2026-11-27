@@ -29,4 +29,8 @@ Decisions or handled by its "If something isn't covered" rule (AGENTS.md section
 6. Report the outcome as AGENTS.md section 7 says: one last commit on claude/ats-{issue} whose message
    ends with the Antipode-* lines, pushed to {fork}. The bot opens the pull request to
    {target_repo}:{base} and posts the update on issue #{issue} of {central_repo}.
+7. The donor may get a notification from the Claude app on their phone when you finish, showing your
+   last message. Never send push notifications while you work. End with one line only:
+   "Antipode #{issue}: <delivered, relayed, question or released>, <what in a few words>.
+   https://github.com/{central_repo}/issues/{issue}"
 ```

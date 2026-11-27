@@ -6,7 +6,7 @@ Usage: preflight.py --issue <n> --donor <login> --ceiling-usd <dollars> [--out <
 Everything a stranger could change (the issue body, comments, the target repository) is read
 here, validated, and never pasted into a shell by the agent. Prints one JSON object:
   {"ok": true, "target", "base", "sha", "fork", "model", "effort", "relay_branch", "relay_sha",
-   "frozen_comment", "relay_comment", "prompt_file", "sources", "disallowed_tools"}
+   "frozen_comment", "relay_comment", "prompt_file", "routine_name", "sources", "disallowed_tools"}
 or {"ok": false, "reason": "..."} (exit 1). On failure the skill releases the request.
 """
 import argparse
@@ -188,6 +188,8 @@ def main():
                       "fork": fork, "model": alias, "effort": effort, "relay_branch": relay_branch,
                       "relay_sha": relay_sha, "frozen_comment": frozen_url, "relay_comment": relay_url,
                       "prompt_file": prompt_file,
+                      # Shown in the routine list and in the Claude app's notification when it ends.
+                      "routine_name": f"Antipode · #{args.issue} · {target}",
                       "sources": [f"https://github.com/{fork}", f"https://github.com/{CENTRAL}"],
                       "disallowed_tools": DISALLOWED_TOOLS}, indent=2))
 
