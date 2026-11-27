@@ -75,7 +75,27 @@ def records(comments):
                 continue
             if isinstance(rec, dict):
                 found.append(rec)
-    return found
+    return follow_renames(found, comments)
+
+
+def follow_renames(recs, comments):
+    """Records keep the login a person had when the bot answered. GitHub shows a comment under its
+    author's current login, so a record tied to a comment (its cid) reveals a rename: every record
+    of this request then uses the current login, and stats, locks and reviews stay one person."""
+    authors = {comment_id(c): (c.get("author") or {}).get("login", "")
+               for c in comments if not is_bot(c)}
+    renamed = {}
+    for rec in recs:
+        old = rec.get("donor") or rec.get("by")
+        now = authors.get(rec.get("cid", ""), "")
+        if old and now and now.lower() not in (old.lower(), "ghost"):
+            renamed[old.lower()] = now
+    if renamed:
+        for rec in recs:
+            for key in ("donor", "by"):
+                if isinstance(rec.get(key), str) and rec[key].lower() in renamed:
+                    rec[key] = renamed[rec[key].lower()]
+    return recs
 
 
 def safe(text, limit=600):
@@ -91,6 +111,11 @@ def body_hash(body):
 def parse_tokens(text):
     match = re.search(r"tokens=(\d+)", text)
     return min(int(match.group(1)), MAX_TOKENS) if match else 0
+
+
+def claim_is_live(claim, now):
+    """True while a claim record is inside its CLAIM_HOURS lock."""
+    return now - (claim.get("at") or 0) <= CLAIM_HOURS * 3600
 
 
 def too_young(ctx, now):
@@ -124,22 +149,29 @@ def handle_command(text, author, labels, assignees, target_repo, now, ctx=None):
     is_assignee = author in assignees
     plan = {"add": [], "remove": [], "assign": [], "unassign": [], "reply": None, "close": False}
 
+    last_claim = next((r for r in reversed(ctx.get("records", [])) if r.get("event") == "claim"), None)
     if verb == "claim":
+        # The hourly sweep is best effort (GitHub skips scheduled runs for hours): a lock past its
+        # time is free as the bot promised, whether or not the sweep has reopened it yet.
+        stale = "claimed" in labels and last_claim is not None and not claim_is_live(last_claim, now)
         if author.lower() == (ctx.get("requester") or "").lower():
             plan["reply"] = f"@{author} you can’t take your own request."
         elif too_young(ctx, now):
             plan["reply"] = f"@{author} taking requests needs a GitHub account older than {MIN_ACCOUNT_AGE_DAYS} days."
         elif ctx.get("claims_elsewhere"):
             plan["reply"] = f"@{author} you already hold another request. Deliver, relay or release it first."
-        elif "claimed" in labels:
+        elif "claimed" in labels and not stale:
             plan["reply"] = f"@{author} someone already took this request."
-        elif not labels & {"open", "relay"}:
+        elif not stale and not labels & {"open", "relay"}:
             plan["reply"] = f"@{author} this request is not open."
         else:
             until = datetime.fromtimestamp(now + CLAIM_HOURS * 3600, timezone.utc)
-            plan["add"] = ["claimed"]
+            plan["add"] = [] if stale else ["claimed"]
             plan["remove"] = ["open"]
             plan["assign"] = [author]
+            previous = last_claim.get("donor") if stale else None
+            if previous and previous.lower() != author.lower():
+                plan["unassign"] = [previous]
             plan["reply"] = record_comment(
                 f"{who}Taken by @{author}’s agent. Free again at {until:%Y-%m-%d %H:%M} UTC without news.",
                 {"event": "claim", "donor": author, "at": int(now)},
@@ -147,7 +179,6 @@ def handle_command(text, author, labels, assignees, target_repo, now, ctx=None):
         return plan
 
     # A long session can outlive its 6-hour lock: its donor may still deliver if nobody took it since.
-    last_claim = next((r for r in reversed(ctx.get("records", [])) if r.get("event") == "claim"), None)
     if (verb == "delivered" and not is_assignee and "claimed" not in labels and last_claim
             and last_claim.get("donor", "").lower() == author.lower()):
         is_assignee = True
@@ -511,6 +542,18 @@ def trusted_reviewers():
     return sorted(t for t in trusted if t)
 
 
+def held_elsewhere(held, number, now):
+    """Other requests a donor still holds: a lock past its time no longer counts, sweep or not."""
+    live = []
+    for other in held:
+        if other["number"] == number:
+            continue
+        claims = [r for r in records(other.get("comments", [])) if r.get("event") == "claim"]
+        if not claims or claim_is_live(claims[-1], now):
+            live.append(other["number"])
+    return live
+
+
 def command_context(issue, author, body):
     request = parse(issue["body"])
     ctx = {"requester": issue["author"]["login"], "records": records(issue["comments"]),
@@ -521,8 +564,8 @@ def command_context(issue, author, body):
         ctx["author_created_at"] = account_created_at(author)
     if verb == "claim":
         held = gh_json("issue", "list", "-R", repo(), "--assignee", author, "--label", "claimed",
-                       "--state", "open", "--json", "number", check=False) or []
-        ctx["claims_elsewhere"] = [i["number"] for i in held if i["number"] != issue["number"]]
+                       "--state", "open", "--json", "number,comments", check=False) or []
+        ctx["claims_elsewhere"] = held_elsewhere(held, issue["number"], time.time())
     if verb == "delivered":
         match = re.search(r"https://github\.com/([^/\s]+/[^/\s]+)/pull/(\d+)", body)
         pr = gh_json("api", f"repos/{match.group(1)}/pulls/{match.group(2)}", check=False) if match else None

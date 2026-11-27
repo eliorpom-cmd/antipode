@@ -38,6 +38,9 @@ description: Give leftover Claude Code limit to someone's public project. Shows 
    them what the bot said (taken by someone else, account too new, already holding a request) and offer
    the next one.
 5. **Fork.** `gh repo fork <repo> --clone=false` (no-op if the fork exists).
+   If the fork didn't exist before, tell the user in one line: if their Claude GitHub app is set to
+   "Only select repositories", add `<fork>` at https://github.com/settings/installations now, or the
+   cloud session can't push. Wait for them to say it's done or that the app isn't restricted.
 6. **Cost ceiling.** The cloud session can't see the weekly limit, so it gets a number in
    `cost_usd`: what its tokens would cost at API prices, which follows the plan limit across
    token kinds and models. Cost per weekly percent, from the user's own logs:

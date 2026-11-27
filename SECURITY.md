@@ -63,7 +63,11 @@ Code from a target repository never runs on your computer. It runs only inside t
 - The reviewer subagent is limited to read-only tools, and told to read only the downloaded folder; the
   tools themselves don't enforce that path. Its public reason is checked by the main agent before posting.
 - The donor's cloud session keeps Claude Code's built-in GitHub tools for the donor's account. AGENTS.md
-  restricts them; GitHub can't.
+  restricts them; GitHub can't. Donors can close this gap themselves: in
+  [GitHub settings → Applications](https://github.com/settings/installations), configure the Claude app
+  with "Only select repositories" and add only your Antipode forks (`give` reminds you to add each new
+  fork). A prompt injection that gets past the reviewers then reaches a fork, not your private
+  repositories. Donating from a separate GitHub account also works, if it's older than 90 days.
 - A pull request opened by a donor's agent comes from the donor's GitHub account. Review it like any
   contribution from a stranger before merging.
 - Antipode is new (public since November 2026). It was reviewed before launch by independent AI agents

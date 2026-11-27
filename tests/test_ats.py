@@ -102,6 +102,69 @@ class StatsTest(unittest.TestCase):
         self.assertIsNotNone(stats["people"]["bob"]["last_donation_at"])
 
 
+class RenameTest(unittest.TestCase):
+    """A donor renamed overnight on the first real donations (d3xter1z → twistedwhitebranch)."""
+
+    def comments(self):
+        def rec(**r):
+            return bot(f"x <!-- ats:record {json.dumps(r)} -->")
+        return [
+            {"author": {"login": "dex-new"}, "url": "https://github.com/o/r/issues/3#issuecomment-11", "body": "/claim"},
+            rec(event="claim", donor="dex-old", at=NOW - 600, cid="11"),
+            {"author": {"login": "dex-new"}, "url": "https://github.com/o/r/issues/3#issuecomment-12",
+             "body": "/delivered https://github.com/alice/app/pull/1 tokens=100"},
+            rec(event="delivered", donor="dex-old", tokens=100, pr="u", at=NOW, cid="12"),
+            rec(event="merged", donor="dex-old", at=NOW),
+        ]
+
+    def test_records_use_the_current_login(self):
+        self.assertEqual({r["donor"] for r in ats.records(self.comments())}, {"dex-new"})
+
+    def test_stats_count_one_person(self):
+        stats = ats.build_stats([{"author": {"login": "alice"}, "comments": self.comments()}], NOW)
+        self.assertNotIn("dex-old", stats["people"])
+        self.assertEqual(stats["people"]["dex-new"]["delivered"], 1)
+        self.assertEqual(stats["people"]["dex-new"]["merged"], 1)
+
+    def test_deleted_account_keeps_its_login(self):
+        comments = self.comments()
+        comments[0]["author"]["login"] = "ghost"
+        comments[2]["author"]["login"] = "ghost"
+        self.assertEqual({r["donor"] for r in ats.records(comments)}, {"dex-old"})
+
+
+class StaleLockTest(unittest.TestCase):
+    """GitHub skips scheduled sweeps for hours: a lock past its time must be free anyway."""
+
+    def claim(self, age_hours, author="carol"):
+        recs = [{"event": "claim", "donor": "bob", "at": NOW - age_hours * 3600}]
+        return ats.handle_command("/claim", author, {"claimed"}, {"bob"}, TARGET, NOW,
+                                  {"requester": "alice", "records": recs})
+
+    def test_expired_lock_can_be_taken(self):
+        plan = self.claim(7)
+        self.assertEqual(plan["assign"], ["carol"])
+        self.assertEqual(plan["unassign"], ["bob"])
+        self.assertEqual(plan["add"], [])
+        self.assertIn("Taken by @carol", plan["reply"])
+
+    def test_live_lock_stays(self):
+        self.assertIn("already took", self.claim(1)["reply"])
+
+    def test_same_donor_takes_it_again(self):
+        plan = self.claim(7, author="bob")
+        self.assertEqual(plan["assign"], ["bob"])
+        self.assertEqual(plan["unassign"], [])
+
+    def test_expired_lock_elsewhere_does_not_block(self):
+        def held(number, age_hours=None):
+            comments = [] if age_hours is None else [bot(ats.record_comment(
+                "x", {"event": "claim", "donor": "bob", "at": NOW - age_hours * 3600}))]
+            return {"number": number, "comments": comments}
+        held_list = [held(3, 7), held(4, 1), held(5), held(9, 1)]
+        self.assertEqual(ats.held_elsewhere(held_list, 9, NOW), [4, 5])
+
+
 class ReviewTest(unittest.TestCase):
     def test_risky_files(self):
         notes = ats.risky_files(["src/a.js", ".claude/settings.json", ".mcp.json", "tools/x.exe"],

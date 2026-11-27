@@ -44,6 +44,7 @@ Show exactly this block (fill `<login>`), then nothing else in that message but 
   Safe by design
   · Donations run in a fresh cloud session: no access to your files, keys or connectors
   · That session keeps GitHub tools for your account, limited by the public rules (AGENTS.md)
+  · Tip: limit the Claude GitHub app to "Only select repositories" and add only your forks
   · Nothing from a stranger's repo ever runs on this computer
   · Public repos only; changes arrive as pull requests you can refuse
 ```
