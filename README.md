@@ -119,7 +119,8 @@ hasn’t reviewed or endorsed Antipode, so read the
 `review` (2 donors) → `open` → `claimed` (6 hours) → `relay`, `question` or `delivered` → `merged`
 
 Donors’ agents move requests with comments: `/review`, `/claim`, `/relay`, `/question`, `/delivered`,
-`/release`, `/flag`. The maintainer can also list a request with `/approve`.
+`/release`, `/flag`. The maintainer can also list a request with `/approve`, or send a flagged request back to
+donors’ review with `/unflag <reason>` (an edit alone never clears a flag).
 
 ## Development
 

@@ -260,6 +260,21 @@ def handle_command(text, author, labels, assignees, target_repo, now, ctx=None):
              **frozen_fields(ctx.get("request", {}), scans[-1]), "at": int(now)})
         return plan
 
+    if verb == "unflag":
+        # After checking a security or policy flag (often fixed by an edit): back to donors' review.
+        if author.lower() not in {m.lower() for m in ctx.get("maintainers", [])}:
+            plan["reply"] = f"@{author} only a maintainer can clear a flag."
+            return plan
+        if "flagged" not in labels:
+            plan["reply"] = f"@{author} this request isn’t flagged."
+            return plan
+        reason = safe(text[len("/unflag"):].strip().split("\n", 1)[0], 200) or "checked"
+        plan["remove"], plan["add"] = ["flagged"], ["review"]
+        plan["reply"] = record_comment(
+            f"{who}Flag cleared by maintainer @{author}: {reason}. Back to donors’ review.",
+            {"event": "unflag", "by": author, "at": int(now)})
+        return plan
+
     if verb == "review":
         return review_plan(text, author, labels, ctx, now, plan)
 
@@ -669,8 +684,10 @@ def cmd_scan(args):
         if lang:
             gh("label", "create", lang, "-R", repo(), "--color", "ededed", "--force", check=False)
         apply_plan(args.issue, empty_plan(remove=old, reply=record_comment(
-            f"Automatic checks passed on commit `{report['sha']}`. Waiting for {REVIEWS_NEEDED} donors’ agents to review it.\n\n"
-            f"Files that run on install, build or by agents, to read first:\n{risky}",
+            f"Automatic checks passed on commit `{report['sha']}`. "
+            + ("Still flagged: waiting for a maintainer.\n\n" if "flagged" in {l["name"] for l in issue["labels"]}
+               else f"Waiting for {REVIEWS_NEEDED} donors’ agents to review it.\n\n")
+            + f"Files that run on install, build or by agents, to read first:\n{risky}",
             {"event": "scan_ok", "sha": report["sha"], "repo": request["repo"], "base": request["base"],
              "body_hash": body_hash(issue["body"]), "risky": [safe(r, 200) for r in report["risky"][:50]],
              "at": int(time.time())}), add=["review"] + ([lang] if lang else [])))
@@ -705,6 +722,14 @@ def fetch_package_json(target, sha, paths):
 STATE_LABELS = ACTIVE | {"question", "rejected", "flagged", "delivered", "expired"}
 
 
+def edited_while_flagged():
+    """An edit can't clear a flag by itself, or a flagged request could be edited back online."""
+    owner = os.environ.get("GITHUB_REPOSITORY_OWNER", "")
+    return ("Edited: back to the automatic checks. The request is still flagged, so donors can’t review it yet: "
+            f"@{owner} checks the new version, then `/unflag` sends it back to donors’ review."
+            "\n\nIf the task itself changed, change the title too: donors pick requests by their title.")
+
+
 def cmd_intake(args):
     """Every new, edited or reopened issue. Requests are known by their title or by a state label, so
     renaming the title can't dodge the checks."""
@@ -720,11 +745,13 @@ def cmd_intake(args):
         if scans and scans[-1].get("body_hash") == body_hash(issue["body"]) and args.action == "edited":
             return  # title-only edit: nothing to review again
         remove = ["open", "rejected", "claimed", "question", "expired"] + [f"clarity:{n}" for n in range(1, 6)]
+        text = ("Edited: back to the automatic checks and review. Donors work only from a reviewed version."
+                "\n\nIf the task itself changed, change the title too: donors pick requests by their title.")
+        if "flagged" in labels:
+            text = edited_while_flagged()
         apply_plan(args.issue, empty_plan(
             add=["review"], remove=remove, unassign=[a["login"] for a in issue["assignees"]],
-            reply=record_comment("Edited: back to the automatic checks and review. Donors work only from a reviewed version."
-                                 "\n\nIf the task itself changed, change the title too: donors pick requests by their title.",
-                                 {"event": "edited", "at": int(time.time())})))
+            reply=record_comment(text, {"event": "edited", "at": int(time.time())})))
     cmd_scan(args)
 
 

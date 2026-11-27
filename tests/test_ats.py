@@ -102,6 +102,37 @@ class StatsTest(unittest.TestCase):
         self.assertIsNotNone(stats["people"]["bob"]["last_donation_at"])
 
 
+class UnflagTest(unittest.TestCase):
+    """Request #9: the requester fixed a flagged setup by editing, and the request stayed stuck."""
+
+    def unflag(self, author="elior", labels=("review", "flagged")):
+        return ats.handle_command("/unflag settings.json removed", author, set(labels), set(), TARGET, NOW,
+                                  {"requester": "alice", "records": [], "maintainers": ["elior"]})
+
+    def test_maintainer_sends_it_back_to_review(self):
+        plan = self.unflag()
+        self.assertEqual(plan["remove"], ["flagged"])
+        self.assertEqual(plan["add"], ["review"])
+        self.assertIn("settings.json removed", plan["reply"])
+        self.assertEqual(ats.records([bot(plan["reply"])])[0]["event"], "unflag")
+
+    def test_only_the_maintainer(self):
+        plan = self.unflag(author="bob")
+        self.assertIn("only a maintainer", plan["reply"])
+        self.assertEqual(plan["remove"], [])
+
+    def test_not_flagged(self):
+        self.assertIn("isn’t flagged", self.unflag(labels=("review",))["reply"])
+
+    def test_edit_message_names_the_flag(self):
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"GITHUB_REPOSITORY_OWNER": "elior"}):
+            text = ats.edited_while_flagged()
+        self.assertIn("still flagged", text)
+        self.assertIn("@elior", text)
+        self.assertIn("/unflag", text)
+
+
 class RenameTest(unittest.TestCase):
     """A donor renamed overnight on the first real donations (d3xter1z → twistedwhitebranch)."""
 
