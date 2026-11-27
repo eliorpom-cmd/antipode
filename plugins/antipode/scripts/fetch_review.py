@@ -20,7 +20,7 @@ import sys
 import tarfile
 
 CENTRAL = "eliorpom-cmd/antipode"
-BOT = ("github-actions[bot]", "github-actions")
+BOT = ("antipode-bot", "github-actions[bot]", "github-actions")
 RECORD_RE = re.compile(r"<!-- ats:record (\{[^\n]*\}) -->\s*\Z")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 REPO_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/(?!\.+$)[A-Za-z0-9._-]{1,100}$")

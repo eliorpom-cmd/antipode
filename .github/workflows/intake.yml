@@ -24,6 +24,7 @@ jobs:
       - name: Automatic checks
         env:
           GH_TOKEN: ${{ github.token }}
+          ANTIPODE_BOT_TOKEN: ${{ secrets.ANTIPODE_BOT_TOKEN }}
           NUMBER: ${{ github.event.issue.number }}
           ACTION: ${{ github.event.action }}
         run: python3 scripts/ats.py intake --issue "$NUMBER" --action "$ACTION"

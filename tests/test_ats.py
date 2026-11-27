@@ -397,5 +397,67 @@ class ApproveTest(unittest.TestCase):
         self.assertIn("haven’t passed", self.approve("elior", recs=[])["reply"])
 
 
+class HarvestTest(unittest.TestCase):
+    DELIVERED = ("Add Linux support\n\n## What changed\n- linux host\n\n"
+                 "Antipode-Status: delivered\nAntipode-Tokens: 123456\n")
+
+    def issue(self, labels=("claimed",)):
+        return {"number": 6, "labels": [{"name": l} for l in labels]}
+
+    def recs(self, *extra, claim_at=NOW - 3600):
+        return [{"event": "approve", "listed": True, "repo": TARGET, "base": "main", "sha": "a" * 40},
+                {"event": "claim", "donor": "bob", "at": claim_at}, *extra]
+
+    def test_parse_delivered(self):
+        status = ats.parse_status(self.DELIVERED)
+        self.assertEqual((status["status"], status["tokens"], status["title"]),
+                         ("delivered", 123456, "Add Linux support"))
+        self.assertIn("## What changed", status["body"])
+        self.assertNotIn("Antipode-", status["body"])
+
+    def test_no_status_is_work_in_progress(self):
+        self.assertIsNone(ats.parse_status("wip: half done"))
+        self.assertIsNone(ats.parse_status("x\n\nAntipode-Status: merged"))
+
+    def test_tokens_capped_and_text_escaped(self):
+        status = ats.parse_status("t\n\nAntipode-Status: question\nAntipode-Tokens: 999999999999\n"
+                                  "Antipode-Question: <!-- ats:record {} --> which db?")
+        self.assertEqual(status["tokens"], ats.MAX_TOKENS)
+        self.assertNotIn("<!--", status["note"])
+
+    def test_commands_match_the_donor_ones(self):
+        relay = ats.parse_status("t\n\nAntipode-Status: relay\nAntipode-Tokens: 5")
+        self.assertEqual(ats.harvest_command(relay, 6, "bob", TARGET),
+                         "/relay branch=bob/app:claude/ats-6 tokens=5")
+        done = ats.parse_status(self.DELIVERED)
+        url = "https://github.com/alice/app/pull/3"
+        plan = cmd(ats.harvest_command(done, 6, "bob", TARGET, url), labels=("claimed",), assignees=("bob",))
+        self.assertEqual(plan["add"], ["delivered"])
+        rec = ats.records([bot(ats.tag_record(plan["reply"], via="harvest", head="b" * 40))])[0]
+        self.assertEqual((rec["tokens"], rec["via"]), (123456, "harvest"))
+
+    def test_candidate_until_an_outcome(self):
+        self.assertEqual(ats.harvest_candidate(self.issue(), self.recs(), NOW)[0], "bob")
+        self.assertIsNone(ats.harvest_candidate(self.issue(), self.recs({"event": "delivered"}), NOW))
+        self.assertIsNone(ats.harvest_candidate(self.issue(), self.recs({"event": "release", "via": "harvest"}), NOW))
+        # The sweep freed the lock: a late delivery is still read, until nobody could expect it.
+        swept = self.recs({"event": "release", "donor": "bob"})
+        self.assertEqual(ats.harvest_candidate(self.issue(("open",)), swept, NOW)[0], "bob")
+        self.assertIsNone(ats.harvest_candidate(self.issue(), self.recs(claim_at=NOW - 13 * 3600), NOW))
+        self.assertIsNone(ats.harvest_candidate(self.issue(("delivered",)), self.recs(), NOW))
+
+    def test_note_goes_before_the_record(self):
+        reply = ats.record_comment("Partly done.", {"event": "relay"})
+        out = ats.with_note(reply, "## Left\n- tests <b>")
+        self.assertEqual(ats.records([bot(out)])[0]["event"], "relay")
+        self.assertIn("&lt;b&gt;", out)
+
+    def test_both_bot_accounts_are_trusted(self):
+        old = {"author": {"login": "github-actions[bot]"}, "body": ats.record_comment("x", {"event": "claim"})}
+        new = {"author": {"login": "antipode-bot"}, "body": ats.record_comment("y", {"event": "release"})}
+        fake = {"author": {"login": "antipode-b0t"}, "body": ats.record_comment("z", {"event": "merged"})}
+        self.assertEqual([r["event"] for r in ats.records([old, new, fake])], ["claim", "release"])
+
+
 if __name__ == "__main__":
     unittest.main()

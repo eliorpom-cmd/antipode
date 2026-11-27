@@ -6,11 +6,13 @@ Subcommands:
   scan      automatic checks on a new or edited request; writes a JSON report
   (review)  peer review happens through /review commands from donors' agents
   sweep     hourly: free stale claims, expire old requests, follow delivered PRs
+  harvest   every 10 minutes: turn the Antipode-* trailers pushed by donors' sessions into
+            pull requests and records
   stats     rebuild stats.json from the bot's records
 
 Every state change leaves a bot comment carrying a hidden record
 (<!-- ats:record {...} -->). stats.json and the sweep read only records written by the
-bot account, so nobody can forge them by commenting.
+bot accounts, so nobody can forge them by commenting.
 """
 import argparse
 import json
@@ -24,7 +26,9 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from parse_request import FORMAT_URL, parse, problems  # noqa: E402
 
-BOT = "github-actions[bot]"
+BOT = "antipode-bot"  # writes every visible comment and opens the pull requests
+# Records are trusted only from these accounts; github-actions wrote them before the bot existed.
+BOTS = (BOT, "github-actions[bot]", "github-actions")
 CLAIM_HOURS = 6
 EXPIRE_DAYS = 30
 MAX_OPEN_PER_AUTHOR = 5
@@ -58,7 +62,7 @@ def record_comment(text, record):
 
 
 def is_bot(comment):
-    return (comment.get("author") or {}).get("login") in (BOT, "github-actions")
+    return (comment.get("author") or {}).get("login") in BOTS
 
 
 def records(comments):
@@ -508,9 +512,16 @@ def load_issue(number):
                    "--json", "number,title,body,labels,assignees,author,createdAt,comments")
 
 
+def comment_as_bot(number, body):
+    if os.environ.get("ANTIPODE_BOT_TOKEN"):
+        bot_gh("issue", "comment", str(number), "-R", repo(), "--body-file", "-", input_text=body)
+    else:  # forks of this repository and local runs: the workflow token still works
+        gh("issue", "comment", str(number), "-R", repo(), "--body-file", "-", input_text=body)
+
+
 def apply_plan(number, plan):
     if plan["reply"]:
-        gh("issue", "comment", str(number), "-R", repo(), "--body-file", "-", input_text=plan["reply"])
+        comment_as_bot(number, plan["reply"])
     if plan["add"] or plan["remove"]:
         args = ["issue", "edit", str(number), "-R", repo()]
         for name in plan["add"]:
@@ -802,6 +813,165 @@ def follow_pr(issue, recs, url, now):
                                  {"event": "pr_closed", "donor": donor, "at": int(now)})))
 
 
+# Delivery without GitHub tools: the donor's cloud session can only push its branch. Its newest
+# commit on claude/ats-<n> ends with Antipode-* trailers, and the harvest (every 10 minutes) turns
+# them into what the donor used to post: the pull request (opened by the Antipode bot account) and
+# the /delivered, /relay, /question, /release or /flag record.
+TRAILER_RE = re.compile(r"^Antipode-([A-Za-z]+):[ \t]*(.*?)[ \t]*$")
+STATUSES = ("delivered", "relay", "question", "release", "flag")
+OUTCOMES = ("delivered", "relay", "question")
+HARVEST_HOURS = 2 * CLAIM_HOURS  # a late delivery is still accepted while nobody took the request since
+
+
+def parse_status(message):
+    """Read the trailers of a commit message. None when it carries no valid Antipode-Status."""
+    lines = (message or "").replace("\r\n", "\n").strip().split("\n")
+    fields, body = {}, []
+    for line in lines[1:]:
+        match = TRAILER_RE.match(line)
+        if match:
+            fields[match.group(1).lower()] = match.group(2)
+        else:
+            body.append(line)
+    status = fields.get("status", "").lower()
+    if status not in STATUSES:
+        return None
+    tokens = fields.get("tokens", "")
+    return {"status": status,
+            "tokens": min(int(tokens), MAX_TOKENS) if tokens.isdigit() else 0,
+            "title": safe(fields.get("title") or lines[0], 120).strip(),
+            "note": safe(fields.get("question") or fields.get("reason") or "", 300).strip(),
+            "body": "\n".join(body).strip()}
+
+
+def harvest_command(status, issue, donor, target, pr_url=None):
+    """The slash command the donor would have posted, for handle_command."""
+    branch = f"{donor}/{target.split('/')[-1]}:claude/ats-{issue}"
+    kind, tokens, note = status["status"], status["tokens"], status["note"]
+    if kind == "delivered":
+        return f"/delivered {pr_url} tokens={tokens}"
+    if kind == "relay":
+        return f"/relay branch={branch} tokens={tokens}"
+    if kind == "question":
+        return f"/question {note or 'see the note on the branch'} branch={branch}"
+    return f"/{kind} {note or 'no reason given'}"
+
+
+def harvest_candidate(issue, recs, now):
+    """(donor, frozen record) when a donor may still report on this request, else None."""
+    claims = [i for i, r in enumerate(recs) if r.get("event") == "claim"]
+    if not claims:
+        return None
+    last = recs[claims[-1]]
+    if now - (last.get("at") or 0) > HARVEST_HOURS * 3600:
+        return None
+    labels = {label["name"] for label in issue["labels"]}
+    if not labels & {"claimed", "open", "relay"}:
+        return None
+    after = recs[claims[-1] + 1:]
+    if any(r.get("event") in OUTCOMES or r.get("via") == "harvest" for r in after):
+        return None
+    listed = [r for r in recs if r.get("listed")]
+    if not listed:
+        return None
+    return last.get("donor"), listed[-1]
+
+
+def pr_body(status, issue_url, donor, issue):
+    note = status["body"][:6000] or "No description."
+    return (f"{note}\n\n---\n"
+            f"Antipode request: {issue_url}\n"
+            f"Tokens given by @{donor}. Opened by the Antipode bot from `{donor}:claude/ats-{issue}`.")
+
+
+def with_note(reply, note):
+    """Insert the session's note (relay hand-off, question details) before the record."""
+    if not note:
+        return reply
+    match = RECORD_RE.search(reply)
+    cut = match.start() if match else len(reply)
+    return reply[:cut].rstrip() + "\n\n" + safe(note, 4000) + "\n\n" + reply[cut:]
+
+
+def tag_record(reply, **fields):
+    match = RECORD_RE.search(reply)
+    if not match:
+        return record_comment(reply, {"event": "reply", **fields})
+    rec = json.loads(match.group(1))
+    rec.update(fields)
+    return reply[:match.start()] + f"<!-- ats:record {json.dumps(rec, separators=(',', ':'))} -->"
+
+
+def bot_gh(*args, input_text=None):
+    """gh as the Antipode bot account. It has no write access to any repository: it comments and
+    opens pull requests; labels and assignees stay with the workflow's own token."""
+    token = os.environ.get("ANTIPODE_BOT_TOKEN")
+    if not token:
+        raise RuntimeError("ANTIPODE_BOT_TOKEN is not set")
+    result = subprocess.run(["gh", *args], input=input_text, capture_output=True, text=True,
+                            env={**os.environ, "GH_TOKEN": token})
+    if result.returncode != 0:
+        raise RuntimeError(f"gh {args[0]} {args[1] if len(args) > 1 else ''}: {result.stderr.strip()}")
+    return json.loads(result.stdout) if result.stdout.strip() else None
+
+
+def open_pull_request(target, base, donor, issue, title, body):
+    head = f"{donor}:claude/ats-{issue}"
+    existing = gh_json("api", f"repos/{target}/pulls?head={head}&state=open", check=False) or []
+    if existing:
+        return existing[0]["html_url"]
+    pr = bot_gh("api", "-X", "POST", f"repos/{target}/pulls", "-f", f"title={title}", "-f", f"head={head}",
+                "-f", f"base={base}", "-f", f"body={body}")
+    return pr["html_url"]
+
+
+def harvest_issue(issue, now):
+    recs = records(issue["comments"])
+    found = harvest_candidate(issue, recs, now)
+    if not found:
+        return
+    donor, frozen = found
+    target, base, number = frozen.get("repo") or "", frozen.get("base") or "", issue["number"]
+    fork = f"{donor}/{target.split('/')[-1]}"
+    info = gh_json("api", f"repos/{fork}", check=False) or {}
+    if ((info.get("parent") or {}).get("full_name") or "").lower() != target.lower():
+        return
+    head = gh_json("api", f"repos/{fork}/commits/claude/ats-{number}", check=False) or {}
+    status = parse_status((head.get("commit") or {}).get("message"))
+    if not status:
+        return
+    labels = {label["name"] for label in issue["labels"]}
+    if status["status"] != "delivered" and "claimed" not in labels:
+        return  # the lock ran out: only a delivery is still accepted, as /delivered allows
+    full = load_issue(number)
+    pr_url = None
+    if status["status"] == "delivered":
+        issue_url = f"https://github.com/{repo()}/issues/{number}"
+        pr_url = open_pull_request(target, base, donor, number, status["title"],
+                                   pr_body(status, issue_url, donor, number))
+    text = harvest_command(status, number, donor, target, pr_url)
+    ctx = command_context(full, donor, text)
+    plan = handle_command(text, donor, {l["name"] for l in full["labels"]},
+                          {a["login"] for a in full["assignees"]}, target, now, ctx)
+    if not plan or not plan["reply"]:
+        return
+    if status["status"] in ("relay", "question", "flag"):
+        plan["reply"] = with_note(plan["reply"], status["body"])
+    plan["reply"] = tag_record(plan["reply"], via="harvest", head=head.get("sha", ""))
+    apply_plan(number, plan)
+
+
+def cmd_harvest(args):
+    now = time.time()
+    issues = gh_json("issue", "list", "-R", repo(), "--state", "open", "--limit", "500",
+                     "--json", "number,labels,comments")
+    for issue in issues:
+        try:
+            harvest_issue(issue, now)
+        except Exception as error:  # one broken request must not stop the others
+            print(f"harvest: request #{issue['number']} skipped: {error}", file=sys.stderr)
+
+
 def cmd_stats(args):
     issues = gh_json("issue", "list", "-R", repo(), "--state", "all", "--limit", "1000",
                      "--json", "number,author,comments")
@@ -818,10 +988,11 @@ def main():
     p = sub.add_parser("intake"); p.add_argument("--issue", type=int, required=True)
     p.add_argument("--action", required=True); p.add_argument("--out", default="report.json")
     sub.add_parser("sweep")
+    sub.add_parser("harvest")
     p = sub.add_parser("stats"); p.add_argument("--out", default="stats.json")
     args = parser.parse_args()
     {"command": cmd_command, "scan": cmd_scan, "intake": cmd_intake,
-     "sweep": cmd_sweep, "stats": cmd_stats}[args.cmd](args)
+     "sweep": cmd_sweep, "harvest": cmd_harvest, "stats": cmd_stats}[args.cmd](args)
 
 
 if __name__ == "__main__":
