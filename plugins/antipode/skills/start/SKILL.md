@@ -35,7 +35,7 @@ Show exactly this block (fill `<login>`), then nothing else in that message but 
   1. Review 2 requests (safety)  1. Your agent plans the work
   2. Pick 1 of 5, or let Claude  2. You answer every choice once
   3. A cloud session does it,    3. A donor's agent does it and
-     opens a pull request,          sends you a pull request
+     the bot opens the PR,          sends you a pull request
      stops at the share you set
 
   /antipode:review   review waiting requests only
@@ -43,8 +43,7 @@ Show exactly this block (fill `<login>`), then nothing else in that message but 
 
   Safe by design
   · Donations run in a fresh cloud session: no access to your files, keys or connectors
-  · That session keeps GitHub tools for your account, limited by the public rules (AGENTS.md)
-  · Tip: limit the Claude GitHub app to "Only select repositories" and add only your forks
+  · That session has no GitHub tools: it can't see your other repos, only push its branch
   · Nothing from a stranger's repo ever runs on this computer
   · Public repos only; changes arrive as pull requests you can refuse
 ```

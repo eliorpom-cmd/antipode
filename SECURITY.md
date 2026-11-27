@@ -13,8 +13,8 @@ Please don't open a public issue for anything exploitable.
 | Where | What runs | What it can reach |
 |---|---|---|
 | Your computer | The plugin's skills and Python scripts (standard library only), with your `gh` login | Your GitHub account through `gh`, the plugin's cache folder, your Claude Code status line if you allow it |
-| A Claude Code cloud session | The donor's agent doing the work | The donor's fork and this repository, with Claude Code's built-in GitHub tools. No connectors |
-| GitHub Actions in this repository | `scripts/ats.py` (no AI) | Issues and labels of this repository only |
+| A Claude Code cloud session | The donor's agent doing the work | Its clones of the donor's fork and this repository. It pushes one branch (`claude/ats-<n>`) with `git` and reads public pages. No GitHub tools, no connectors |
+| GitHub Actions in this repository | `scripts/ats.py` (no AI) | Issues and labels of this repository. Comments and pull requests go through the [`antipode-bot`](https://github.com/antipode-bot) account, which has no write access to any repository |
 
 Code from a target repository never runs on your computer. It runs only inside the donor's cloud session.
 
@@ -29,8 +29,12 @@ Code from a target repository never runs on your computer. It runs only inside t
   devices and paths outside the folder are dropped at extraction, and nothing extracted is executable.
 - The donor's session reads the request only from the bot's frozen copy (comment ID passed in the
   prompt), never from the editable issue body or other people's comments.
-- [AGENTS.md](AGENTS.md) lists what the agent must never do with its GitHub tools (merge, delete, touch
-  other repositories, secrets, Actions).
+- The session has no GitHub tools. The routine that starts it disallows them (`disallowed_tools`), so
+  an injected prompt can't read the donor's private repositories, open a pull request elsewhere, merge
+  or delete anything. Through `git` it can only push to the repositories it was started with; a clone
+  of the donor's other private repositories is refused.
+- The session reports by pushing its branch with `Antipode-*` lines in its last commit message. The
+  bot reads them from the donor's fork only, and opens the pull request itself.
 
 **The owner changes the repository after review.**
 - The reviewed commit is frozen. The agent checks out that exact commit and stops if it can't.
@@ -39,9 +43,9 @@ Code from a target repository never runs on your computer. It runs only inside t
 - Any edit to the request, even with a new title, sends it back to the checks and review.
 
 **The donor's other data leaks through connectors.**
-- Cloud routines inherit every connector of a claude.ai account by default. The plugin replaces them with
-  a single placeholder that can't connect, then reads the routine back and deletes it if anything else is
-  attached.
+- Cloud routines inherit every connector of a claude.ai account by default. The plugin creates the
+  routine with `clear_mcp_connections`, then reads it back and releases the request if any connector or
+  setting is missing.
 
 **Fake reviewers, griefing, forged state.**
 - Posting a request needs a GitHub account older than 30 days; reviewing, taking and flagging need one
@@ -51,8 +55,10 @@ Code from a target repository never runs on your computer. It runs only inside t
   of its own comment. Text from users that the bot repeats is escaped, so it can't create a record.
 - Every slash command is answered, even when GitHub drops queued runs: each run catches up on unanswered
   comments.
-- `/delivered` is accepted only for a pull request from the donor's fork and branch `claude/ats-<n>`.
+- A delivery is accepted only for a pull request from the donor's fork and branch `claude/ats-<n>`.
   Self-reported token counts are capped.
+- The bot's token can comment and open pull requests, nothing more: the `antipode-bot` account is not a
+  collaborator of any repository. Labels and assignees are changed with the workflow's own token.
 
 **Values from strangers reach a shell.**
 - Repository, branch, commit and model are validated against strict patterns before use. The skills run
@@ -62,13 +68,11 @@ Code from a target repository never runs on your computer. It runs only inside t
 
 - The reviewer subagent is limited to read-only tools, and told to read only the downloaded folder; the
   tools themselves don't enforce that path. Its public reason is checked by the main agent before posting.
-- The donor's cloud session keeps Claude Code's built-in GitHub tools for the donor's account. AGENTS.md
-  restricts them; GitHub can't. Donors can close this gap themselves: in
-  [GitHub settings → Applications](https://github.com/settings/installations), configure the Claude app
-  with "Only select repositories" and add only your Antipode forks (`give` reminds you to add each new
-  fork). A prompt injection that gets past the reviewers then reaches a fork, not your private
-  repositories. Donating from a separate GitHub account also works, if it's older than 90 days.
-- A pull request opened by a donor's agent comes from the donor's GitHub account. Review it like any
+- The session still pushes with the donor's Claude GitHub app. Setting that app to "Only select
+  repositories" in [GitHub settings → Applications](https://github.com/settings/installations) is no
+  longer needed for safety, but it narrows what `git` could reach if Anthropic's proxy ever let more
+  through.
+- A pull request opened for a donor is written by their agent, from their fork. Review it like any
   contribution from a stranger before merging.
 - Antipode is new (public since November 2026). It was reviewed before launch by independent AI agents
   working without context (security, giving, asking); their findings were fixed and are covered by the

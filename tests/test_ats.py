@@ -437,7 +437,7 @@ class HarvestTest(unittest.TestCase):
         self.assertEqual((rec["tokens"], rec["via"]), (123456, "harvest"))
 
     def test_candidate_until_an_outcome(self):
-        self.assertEqual(ats.harvest_candidate(self.issue(), self.recs(), NOW)[0], "bob")
+        self.assertEqual(ats.harvest_candidate(self.issue(), self.recs(), NOW), ("bob", self.recs()[0], NOW - 3600))
         self.assertIsNone(ats.harvest_candidate(self.issue(), self.recs({"event": "delivered"}), NOW))
         self.assertIsNone(ats.harvest_candidate(self.issue(), self.recs({"event": "release", "via": "harvest"}), NOW))
         # The sweep freed the lock: a late delivery is still read, until nobody could expect it.

@@ -347,6 +347,29 @@ class LaunchSafetyTest(unittest.TestCase):
         self.assertEqual(fetch_review.records(comments), [{"event": "release"}])
         self.assertEqual([r for r, _ in preflight.bot_records(comments)], [{"event": "release"}])
 
+    def test_comment_api_url(self):
+        self.assertEqual(preflight.api_url("https://github.com/eliorpom-cmd/antipode/issues/9#issuecomment-123"),
+                         "https://api.github.com/repos/eliorpom-cmd/antipode/issues/comments/123")
+        self.assertIsNone(preflight.api_url("https://evil.example/issues/9#issuecomment-1; rm -rf ~"))
+
+    def test_prompt_has_no_placeholder_left(self):
+        prompt = preflight.fill_prompt({
+            "issue": 9, "central_repo": "eliorpom-cmd/antipode", "fork": "bob/app", "target_repo": "alice/app",
+            "base": "main", "start_sha": "a" * 40, "model": "opus", "ceiling_usd": "$12.00",
+            "frozen_api": "https://api.github.com/repos/eliorpom-cmd/antipode/issues/comments/1", "relay_note": ""})
+        self.assertNotRegex(prompt, r"\{[a-z_]+\}")
+        self.assertNotIn("GitHub tools (", prompt)
+        self.assertIn("curl -s https://api.github.com/", prompt)
+
+    def test_session_gets_no_github_tools(self):
+        for name in ("mcp__github__*", "mcp__claude-code-remote__*"):
+            self.assertIn(name, preflight.DISALLOWED_TOOLS)
+
+    def test_new_bot_account_is_trusted(self):
+        comments = [{"author": {"login": "antipode-bot"}, "body": '<!-- ats:record {"event":"claim"} -->'}]
+        self.assertEqual([r for r, _ in preflight.bot_records(comments)], [{"event": "claim"}])
+        self.assertEqual(fetch_review.records(comments), [{"event": "claim"}])
+
 
 class CheckCiTest(unittest.TestCase):
     def write(self, folder, name, text):

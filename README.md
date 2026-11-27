@@ -46,7 +46,7 @@ Start with `/antipode:start`: it checks your setup and suggests a first step.
 | Run `/antipode:give`. | In your public repository, run `/antipode:ask`. |
 | Your agent first reviews up to 2 requests waiting to be listed: the shared work that keeps everyone safe, a few minutes of your limit. | Your agent reads the code, writes a plan, and asks you every choice the work could meet, all at once. The donor’s session runs alone and can’t ask anything, so nothing is left open. |
 | It shows what’s left of your week, then 5 open requests. You pick one, or say “pick for me”. | The request is posted here as an issue and reviewed before it’s listed. |
-| A cloud session does the work with the model the owner asked for, opens the pull request, and stops at the share of your limit you set. You can close your laptop. | GitHub notifies you when a donor takes it, if their agent has a question, and when the pull request arrives. Have your own agent review it before you merge. |
+| A cloud session does the work with the model the owner asked for, pushes it to your fork, and stops at the share of your limit you set. The [Antipode bot](https://github.com/antipode-bot) opens the pull request and credits you. You can close your laptop. | GitHub notifies you when a donor takes it, if their agent has a question, and when the pull request arrives. Have your own agent review it before you merge. |
 
 Work that doesn’t fit in 5 hours is split into several requests. If a donor runs out halfway, their agent
 pushes its branch and leaves a note, and the next donor continues from there.
@@ -65,8 +65,8 @@ pushes its branch and leaves a note, and the next donor continues from there.
   `~/.cache/antipode/usage.json` (your previous status line keeps working; a backup of your settings is
   saved). Nothing from someone else’s repository is installed, built or run here.
 - **On GitHub, when you give:** it comments on the request (`/review`, `/claim`), forks the target
-  repository to your account, and starts a Claude Code cloud session that pushes a branch to your fork and
-  opens one pull request from your account.
+  repository to your account, and starts a Claude Code cloud session that pushes one branch to your fork. The Antipode bot opens the pull
+  request from that branch and names you in it.
 - **On GitHub, when you ask:** it opens one issue in this repository describing the work.
 - **Never:** it doesn’t read your Claude credentials, doesn’t touch your other repositories, and never
   merges, deletes or changes settings on GitHub.
@@ -76,6 +76,10 @@ pushes its branch and leaves a note, and the next donor continues from there.
 - **Nothing from a stranger runs on your computer.** A donation runs in a fresh Claude Code cloud session
   with no connectors (no email, no drive). Reviews download the code as an archive and only read it, with
   a subagent that has no terminal.
+- **The session can't reach your GitHub account.** It has no GitHub tools: it pushes one branch to your
+  fork and nothing else, so your private repositories stay out of its reach. The
+  [`antipode-bot`](https://github.com/antipode-bot) account opens the pull request and posts updates; it
+  has no write access to any repository.
 - **Every request is checked first.** Automatic checks flag install scripts, hooks and agent settings. Then
   2 donors’ agents read the request and the code, one of them a trusted reviewer (the maintainer, or a
   donor with a merged pull request). One security flag stops it. Reviewing and taking requests need a
@@ -97,8 +101,9 @@ hasn’t reviewed or endorsed Antipode, so read the
 
 - **You use your own plan, yourself.** Each person runs the official Claude Code on their own
   subscription, and starts each donation themselves. No account, password, token or API key is shared.
-- **The result is a normal open source contribution.** Your agent does the work and opens a pull request
-  from your GitHub account, like any contributor helping a public project they chose.
+- **The result is a normal open source contribution.** Your agent does the work on your fork, and the
+  pull request comes from your fork's branch with your name on it, like any contributor helping a public
+  project they chose.
 - **Nobody else uses your Claude.** The project owner never gets access to your account or your usage:
   they receive a pull request, and nothing else.
 - **Nothing is sold or exchanged.** There’s no money, no points and no credit to transfer. The only effect
@@ -118,8 +123,10 @@ hasn’t reviewed or endorsed Antipode, so read the
 
 `review` (2 donors) → `open` → `claimed` (6 hours) → `relay`, `question` or `delivered` → `merged`
 
-Donors’ agents move requests with comments: `/review`, `/claim`, `/relay`, `/question`, `/delivered`,
-`/release`, `/flag`. The maintainer can also list a request with `/approve`, or send a flagged request back to
+Donors’ skills post `/review` and `/claim`. The donor's session reports `delivered`, `relay`, `question`,
+`release` or `flag` in the last commit it pushes, and the bot posts it on the request within 10 minutes
+(details in [AGENTS.md](AGENTS.md) § 7). Anyone holding a request can still comment `/release`, and anyone
+can `/flag`. The maintainer can also list a request with `/approve`, or send a flagged request back to
 donors’ review with `/unflag <reason>` (an edit alone never clears a flag).
 
 ## Development

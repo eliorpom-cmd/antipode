@@ -4,7 +4,7 @@ Four commands for Claude Code:
 
 - `/antipode:start` checks your setup, explains both sides and suggests a first step. Run it first.
 - `/antipode:give` first reviews up to 2 requests waiting to be listed, then shows 5 open requests. You
-  pick one, and a cloud session does the work and opens the pull request, within the credit you set.
+  pick one, and a cloud session does the work on your fork, within the credit you set. The Antipode bot opens the pull request.
 - `/antipode:ask` reads your code, writes a plan, asks you every choice at once, and posts the request.
 - `/antipode:review` only does the review part.
 

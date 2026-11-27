@@ -5,15 +5,14 @@ Usage: preflight.py --issue <n> --donor <login> --ceiling-usd <dollars> [--out <
 
 Everything a stranger could change (the issue body, comments, the target repository) is read
 here, validated, and never pasted into a shell by the agent. Prints one JSON object:
-  {"ok": true, "target", "base", "sha", "fork", "model", "effort", "relay_branch",
-   "frozen_comment", "relay_comment", "prompt_file", "fallback_command"}
+  {"ok": true, "target", "base", "sha", "fork", "model", "effort", "relay_branch", "relay_sha",
+   "frozen_comment", "relay_comment", "prompt_file", "sources", "disallowed_tools"}
 or {"ok": false, "reason": "..."} (exit 1). On failure the skill releases the request.
 """
 import argparse
 import json
 import os
 import re
-import shlex
 import subprocess
 import sys
 import tempfile
@@ -30,6 +29,15 @@ AGENT_CONFIG = re.compile(
     r"(^|/)(\.claude/|\.mcp\.json$|\.codex/|\.cursor/|\.gemini/|\.devcontainer/|\.envrc$|"
     r"CLAUDE(\.local)?\.md$|AGENTS\.md$|GEMINI\.md$|\.husky/|\.githooks/|\.vscode/)")
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
+# The cloud session gets no GitHub tools: a prompt injected through the target's code must not reach
+# the donor's other repositories. It reads public pages with curl and pushes one branch with git.
+DISALLOWED_TOOLS = ["mcp__github", "mcp__github__*", "mcp__claude-code-remote", "mcp__claude-code-remote__*"]
+
+
+def api_url(comment_url):
+    """https://github.com/o/r/issues/9#issuecomment-123 → the public API URL of that comment."""
+    m = re.match(r"^https://github\.com/([^/]+/[^/]+)/issues/\d+#issuecomment-(\d+)$", comment_url or "")
+    return f"https://api.github.com/repos/{m.group(1)}/issues/comments/{m.group(2)}" if m else None
 
 
 def gh_json(*args):
@@ -122,7 +130,7 @@ def main():
         fail(f"unknown model in the request: {frozen.get('model')!r}")
 
     # Relay: the branch comes from the bot's record and must live on a fork of the target.
-    relay_branch, relay_url = None, None
+    relay_branch, relay_url, relay_sha = None, None, None
     if "relay" in labels:
         relays = [(r, url) for r, url in recs if r.get("event") in ("relay", "question") and r.get("branch")]
         if relays:
@@ -139,6 +147,10 @@ def main():
             if touched:
                 fail("the relay branch changes agent configuration: " + ", ".join(touched[:5]))
             relay_branch = rec["branch"]
+            head = gh_json("api", f"repos/{m.group(1)}/{m.group(2)}/commits/{m.group(3)}") or {}
+            relay_sha = head.get("sha") or ""
+            if not SHA_RE.match(relay_sha):
+                fail("can't read the relay branch")
 
     # The donor's fork is what the cloud session opens: its default branch must not carry agent
     # configuration that the reviewers never saw.
@@ -158,21 +170,26 @@ def main():
 
     out = args.out or tempfile.mkdtemp(prefix="antipode-launch-")
     os.makedirs(out, exist_ok=True)
+    frozen_api = api_url(frozen_url)
+    relay_api = api_url(relay_url) if relay_branch else None
+    if not frozen_api or (relay_branch and not relay_api):
+        fail("can't find the bot's comment for this request")
     prompt = fill_prompt({
         "issue": args.issue, "central_repo": CENTRAL, "fork": fork, "target_repo": target, "base": base,
-        "sha": sha, "model": alias, "frozen_comment": frozen_url, "ceiling_usd": f"${args.ceiling_usd:.2f}",
-        "relay": f"the relay branch {relay_branch} (bot comment {relay_url})" if relay_branch else "the frozen sha",
+        "start_sha": relay_sha or sha, "model": alias, "frozen_api": frozen_api,
+        "ceiling_usd": f"${args.ceiling_usd:.2f}",
+        "relay_note": (f"This is a relay: read the previous donor's note with `curl -s {relay_api}`; "
+                       f"the branch already holds their work. ") if relay_branch else "",
     })
     prompt_file = os.path.join(out, "prompt.txt")
     with open(prompt_file, "w") as f:
         f.write(prompt)
-    effort_flag = f" --effort {effort}" if effort else ""
-    fallback = (f"cd {shlex.quote(out)} && claude --cloud --model {alias}{effort_flag} "
-                f"\"$(cat {shlex.quote(prompt_file)})\"")
     print(json.dumps({"ok": True, "issue": args.issue, "target": target, "base": base, "sha": sha,
                       "fork": fork, "model": alias, "effort": effort, "relay_branch": relay_branch,
-                      "frozen_comment": frozen_url, "relay_comment": relay_url,
-                      "prompt_file": prompt_file, "fallback_command": fallback}, indent=2))
+                      "relay_sha": relay_sha, "frozen_comment": frozen_url, "relay_comment": relay_url,
+                      "prompt_file": prompt_file,
+                      "sources": [f"https://github.com/{fork}", f"https://github.com/{CENTRAL}"],
+                      "disallowed_tools": DISALLOWED_TOOLS}, indent=2))
 
 
 if __name__ == "__main__":

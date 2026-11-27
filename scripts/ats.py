@@ -821,6 +821,7 @@ TRAILER_RE = re.compile(r"^Antipode-([A-Za-z]+):[ \t]*(.*?)[ \t]*$")
 STATUSES = ("delivered", "relay", "question", "release", "flag")
 OUTCOMES = ("delivered", "relay", "question")
 HARVEST_HOURS = 2 * CLAIM_HOURS  # a late delivery is still accepted while nobody took the request since
+NO_PUSH_MINUTES = 45  # the session pushes its branch first: none by then means the push was refused
 
 
 def parse_status(message):
@@ -858,7 +859,7 @@ def harvest_command(status, issue, donor, target, pr_url=None):
 
 
 def harvest_candidate(issue, recs, now):
-    """(donor, frozen record) when a donor may still report on this request, else None."""
+    """(donor, frozen record, claim time) when a donor may still report on this request, else None."""
     claims = [i for i, r in enumerate(recs) if r.get("event") == "claim"]
     if not claims:
         return None
@@ -874,7 +875,7 @@ def harvest_candidate(issue, recs, now):
     listed = [r for r in recs if r.get("listed")]
     if not listed:
         return None
-    return last.get("donor"), listed[-1]
+    return last.get("donor"), listed[-1], last.get("at") or 0
 
 
 def pr_body(status, issue_url, donor, issue):
@@ -930,17 +931,26 @@ def harvest_issue(issue, now):
     found = harvest_candidate(issue, recs, now)
     if not found:
         return
-    donor, frozen = found
+    donor, frozen, claimed_at = found
     target, base, number = frozen.get("repo") or "", frozen.get("base") or "", issue["number"]
     fork = f"{donor}/{target.split('/')[-1]}"
     info = gh_json("api", f"repos/{fork}", check=False) or {}
     if ((info.get("parent") or {}).get("full_name") or "").lower() != target.lower():
         return
     head = gh_json("api", f"repos/{fork}/commits/claude/ats-{number}", check=False) or {}
-    status = parse_status((head.get("commit") or {}).get("message"))
+    labels = {label["name"] for label in issue["labels"]}
+    if not head.get("sha"):
+        if "claimed" in labels and now - claimed_at > NO_PUSH_MINUTES * 60:
+            # #8: the donor's Claude GitHub app didn't cover the fork, and the request stayed locked.
+            status = {"status": "release", "tokens": 0, "title": "", "body": "",
+                      "note": f"no branch pushed to {fork} after {NO_PUSH_MINUTES} minutes "
+                              "(the donor's Claude GitHub app may not cover the fork)"}
+        else:
+            return
+    else:
+        status = parse_status((head.get("commit") or {}).get("message"))
     if not status:
         return
-    labels = {label["name"] for label in issue["labels"]}
     if status["status"] != "delivered" and "claimed" not in labels:
         return  # the lock ran out: only a delivery is still accepted, as /delivered allows
     full = load_issue(number)

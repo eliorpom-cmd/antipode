@@ -1,6 +1,6 @@
 ---
 name: give
-description: Give leftover Claude Code limit to someone's public project. Shows 5 open requests, the user picks one (or lets Claude pick), and a cloud session does the work and opens a pull request. Use when the user has limit left before the weekly reset, says "give", "donate my credit", "I have credit left", or asks what to do with unused limit.
+description: Give leftover Claude Code limit to someone's public project. Shows 5 open requests, the user picks one (or lets Claude pick), and a cloud session does the work; the Antipode bot opens the pull request. Use when the user has limit left before the weekly reset, says "give", "donate my credit", "I have credit left", or asks what to do with unused limit.
 ---
 
 # Give leftover limit
@@ -38,9 +38,10 @@ description: Give leftover Claude Code limit to someone's public project. Shows 
    them what the bot said (taken by someone else, account too new, already holding a request) and offer
    the next one.
 5. **Fork.** `gh repo fork <repo> --clone=false` (no-op if the fork exists).
-   If the fork didn't exist before, tell the user in one line: if their Claude GitHub app is set to
-   "Only select repositories", add `<fork>` at https://github.com/settings/installations now, or the
-   cloud session can't push. Wait for them to say it's done or that the app isn't restricted.
+   Then ask the user in one line: if their Claude GitHub app is set to "Only select repositories",
+   add `<fork>` at https://github.com/settings/installations now, or the cloud session can't push.
+   Wait for them to say it's done or that the app isn't restricted. (If the push is refused anyway,
+   the bot frees the request after 45 minutes and says why.)
 6. **Cost ceiling.** The cloud session can't see the weekly limit, so it gets a number in
    `cost_usd`: what its tokens would cost at API prices, which follows the plan limit across
    token kinds and models. Cost per weekly percent, from the user's own logs:
@@ -55,24 +56,28 @@ description: Give leftover Claude Code limit to someone's public project. Shows 
    the reviewers never saw, and writes the session prompt to a file. If it prints `"ok": false`, comment
    `/release <reason>` on the issue, tell the user the reason, and stop. Use only the values it prints
    from here on: never values read from the issue body.
-8. **Launch in the cloud.** Create a one-off cloud routine that runs now, with the model `model`
-   from preflight, the repositories `fork` and `eliorpom-cmd/antipode`, and two messages in this
-   order: `/effort <effort>` (skip it when effort is null), then the content of `prompt_file`.
-   Routines have no effort field, but a `/effort` first message applies to the whole session.
-   The routine must have **no connectors**: routines inherit every connector of the account by
-   default (email, drive…), and an agent working on a stranger's code must not reach them. An empty
-   `mcp_connections` list is ignored, so set it to exactly this one placeholder, which fails to
-   connect and leaves only the built-in GitHub tools:
-   `[{"connector_uuid": "00000000-0000-4000-8000-000000000000", "name": "antipode_none",
-   "transport_type": "http", "url": "https://antipode.byelior.dev/no-mcp", "permitted_tools": [],
-   "tool_policy_overrides": [], "clear_tool_policy_overrides": false}]`.
-   Then read the routine back: if `mcp_connections` holds anything else, delete the routine, comment
-   `/release connectors`, and tell the user to remove their connectors on claude.ai first.
-   If routine creation is refused (auto mode blocks it) or unavailable: ask the user to confirm they
-   have no connectors on claude.ai (Settings → Connectors). If they have some, comment `/release
-   connectors` and stop. Otherwise show `fallback_command` from preflight, to paste in a terminal
-   (it runs from an empty folder).
-   If anything in this step fails, comment `/release <what failed>` so the request doesn't stay locked.
+   **Relay:** when `relay_sha` isn't null, copy the previous donor's work into the fork, so the session
+   finds it there (forks share their commits on GitHub):
+   `gh api -X POST repos/<fork>/git/refs -f ref=refs/heads/claude/ats-<n> -f sha=<relay_sha>`;
+   if the branch already exists, `gh api -X PATCH repos/<fork>/git/refs/heads/claude/ats-<n> -f sha=<relay_sha> -F force=true`.
    Never run the target repository's code on the user's machine.
+8. **Launch in the cloud.** Create a one-off cloud routine that runs now (RemoteTrigger `create`, then
+   `run`), with the model `model` from preflight, the repositories in `sources` (the fork and
+   eliorpom-cmd/antipode, nothing else), and two messages in this order: `/effort <effort>` (skip it
+   when effort is null), then the content of `prompt_file`. Routines have no effort field, but a
+   `/effort` first message applies to the whole session. Two settings keep the session away from
+   the user's accounts, because it works on a stranger's code:
+   - `"clear_mcp_connections": true` at the top of the body: no connectors (email, drive…).
+   - `"disallowed_tools": <disallowed_tools from preflight>` in `job_config.ccr.session_context`: no
+     GitHub tools. The session only pushes its branch with `git`; the Antipode bot opens the pull
+     request and posts on the request.
+   Read the routine back: if `mcp_connections` isn't empty or `disallowed_tools` is missing, comment
+   `/release session settings`, tell the user, and stop.
+   If routine creation is refused (auto mode blocks it) or unavailable: comment `/release could not
+   start a cloud session`, and tell the user to switch auto mode off (Shift+Tab) and run
+   `/antipode:give` again. There is no other way to start the session: a terminal session can't be
+   given these two settings.
+   If anything in this step fails, comment `/release <what failed>` so the request doesn't stay locked.
 9. **Hand off.** Tell the user they can leave: the session link, the dollar ceiling, and that the
-   result will appear on the request (link).
+   result will appear on the request (link) within 10 minutes of the session's last push, posted by
+   the Antipode bot, which also opens the pull request and credits them.
