@@ -478,5 +478,24 @@ class HarvestTest(unittest.TestCase):
         self.assertEqual([r["event"] for r in ats.records([old, new, fake])], ["claim", "release"])
 
 
+class BotGhTest(unittest.TestCase):
+    """Issue #13: `gh issue comment` prints a URL, not JSON; the comment must not crash the run."""
+
+    def run_with(self, stdout, **kwargs):
+        from unittest import mock
+        done = mock.Mock(returncode=0, stdout=stdout, stderr="")
+        with mock.patch.dict(os.environ, {"ANTIPODE_BOT_TOKEN": "t", "GITHUB_REPOSITORY": "o/r"}), \
+                mock.patch.object(ats.subprocess, "run", return_value=done) as run:
+            return ats.comment_as_bot(10, "hi") if kwargs.get("comment") else ats.bot_gh("api", "x"), run
+
+    def test_comment_prints_url(self):
+        _, run = self.run_with("https://github.com/o/r/issues/10#issuecomment-1\n", comment=True)
+        self.assertEqual(run.call_args.kwargs["env"]["GH_TOKEN"], "t")
+
+    def test_api_still_parses_json(self):
+        result, _ = self.run_with('{"html_url": "u"}')
+        self.assertEqual(result, {"html_url": "u"})
+
+
 if __name__ == "__main__":
     unittest.main()

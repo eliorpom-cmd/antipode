@@ -514,7 +514,8 @@ def load_issue(number):
 
 def comment_as_bot(number, body):
     if os.environ.get("ANTIPODE_BOT_TOKEN"):
-        bot_gh("issue", "comment", str(number), "-R", repo(), "--body-file", "-", input_text=body)
+        bot_gh("issue", "comment", str(number), "-R", repo(), "--body-file", "-", input_text=body,
+               parse_json=False)
     else:  # forks of this repository and local runs: the workflow token still works
         gh("issue", "comment", str(number), "-R", repo(), "--body-file", "-", input_text=body)
 
@@ -926,9 +927,10 @@ def tag_record(reply, **fields):
     return reply[:match.start()] + f"<!-- ats:record {json.dumps(rec, separators=(',', ':'))} -->"
 
 
-def bot_gh(*args, input_text=None):
+def bot_gh(*args, input_text=None, parse_json=True):
     """gh as the Antipode bot account. It has no write access to any repository: it comments and
-    opens pull requests; labels and assignees stay with the workflow's own token."""
+    opens pull requests; labels and assignees stay with the workflow's own token.
+    parse_json=False for commands that print plain text (`gh issue comment` prints the comment's URL)."""
     token = os.environ.get("ANTIPODE_BOT_TOKEN")
     if not token:
         raise RuntimeError("ANTIPODE_BOT_TOKEN is not set")
@@ -936,6 +938,8 @@ def bot_gh(*args, input_text=None):
                             env={**os.environ, "GH_TOKEN": token})
     if result.returncode != 0:
         raise RuntimeError(f"gh {args[0]} {args[1] if len(args) > 1 else ''}: {result.stderr.strip()}")
+    if not parse_json:
+        return result.stdout
     return json.loads(result.stdout) if result.stdout.strip() else None
 
 
