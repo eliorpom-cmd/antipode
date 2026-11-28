@@ -38,6 +38,14 @@ Then check the repository's CI: `PY ROOT/scripts/check_ci.py` at the repository 
 From the conversation and the code, work out the goal and what "done" looks like. Read the files
 involved, the tests, and how similar things are done elsewhere in the repository.
 
+The donor's agent runs in a Linux cloud container: no macOS, Xcode, simulator, Windows, screen, real
+device or hardware, no accounts or secrets, and it can't see CI results. If the work needs one of
+these to build, run or test (an iOS or Mac app, Apple-only frameworks like SwiftUI, CryptoKit or
+CoreBluetooth, a device on the desk), tell the user plainly, then either keep the work to what builds
+on Linux, or write into the success criteria what the agent does instead (write the code, say in the
+pull request that it wasn't built or run). Reviewers refuse requests that ask for what the session
+can't do.
+
 ## 3. Write the plan
 
 Write the steps the donor's agent will follow, in order, each with the files it touches. Size it in

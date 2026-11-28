@@ -30,6 +30,14 @@ Check, in this order:
    plan leaves steps vague, if a choice the work will obviously meet (edge cases, words on screen,
    libraries, where code goes, what to test) is missing from Decisions, or if the success criteria
    can't be checked. Name what is missing.
+4. **Doable in the donor's session.** The donor's agent runs in a Linux cloud container: no macOS,
+   Xcode, iOS or Android simulator, Windows, screen, real device or hardware, and no accounts or
+   secrets. Apple-only frameworks (SwiftUI, UIKit, AppKit, CryptoKit, CoreBluetooth) don't build
+   there. Refuse as `unclear` if the work or a success criterion needs one of these to build, run or
+   check, unless the request says what the agent does instead (for example: write the code, say in
+   the pull request that it wasn't built or run, and let the repository's CI check it). Name the
+   criterion that can't be met. A CI job on another system does not help the agent: it can't see
+   CI results.
 
 Otherwise the verdict is ok, with a clarity score from 1 to 5 (5: an agent can do it start to
 finish without guessing).
