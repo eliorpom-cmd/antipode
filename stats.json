@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-28T14:10:20.960917+00:00",
+  "generated_at": "2026-11-28T15:10:19.437349+00:00",
   "people": {
     "eliorpom-cmd": {
       "delivered": 0,
@@ -27,6 +27,6 @@
     "delivered": 7,
     "donated_tokens": 3188808,
     "merged": 5,
-    "requests": 15
+    "requests": 17
   }
 }
