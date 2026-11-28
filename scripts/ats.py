@@ -1014,6 +1014,21 @@ def tag_record(reply, **fields):
     return reply[:match.start()] + f"<!-- ats:record {json.dumps(rec, separators=(',', ':'))} -->"
 
 
+def api_error_detail(stdout):
+    """' (message; errors)' from a GitHub API error body, or '' when there is none."""
+    try:
+        data = json.loads(stdout or "")
+    except ValueError:
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    parts = [str(data.get("message") or "")]
+    parts += [str(e.get("message") or e.get("code") or e) if isinstance(e, dict) else str(e)
+              for e in data.get("errors") or []]
+    detail = "; ".join(p for p in parts if p)
+    return f" ({detail[:300]})" if detail else ""
+
+
 def bot_gh(*args, input_text=None, parse_json=True):
     """gh as the Antipode bot account. It has no write access to any repository: it comments and
     opens pull requests; labels and assignees stay with the workflow's own token.
@@ -1024,7 +1039,10 @@ def bot_gh(*args, input_text=None, parse_json=True):
     result = subprocess.run(["gh", *args], input=input_text, capture_output=True, text=True,
                             env={**os.environ, "GH_TOKEN": token})
     if result.returncode != 0:
-        raise RuntimeError(f"gh {args[0]} {args[1] if len(args) > 1 else ''}: {result.stderr.strip()}")
+        # `gh api` prints the API's error body on stdout: keep its message and errors, or a 422
+        # only says "Validation Failed" and nobody can tell why.
+        raise RuntimeError(f"gh {args[0]} {args[1] if len(args) > 1 else ''}: {result.stderr.strip()}"
+                           + api_error_detail(result.stdout))
     if not parse_json:
         return result.stdout
     return json.loads(result.stdout) if result.stdout.strip() else None
@@ -1035,8 +1053,11 @@ def open_pull_request(target, base, donor, issue, title, body):
     existing = gh_json("api", f"repos/{target}/pulls?head={head}&state=open", check=False) or []
     if existing:
         return existing[0]["html_url"]
+    # The bot can't push to the donor's fork, and GitHub refuses (422 "Fork collab can't be granted
+    # by someone without permission") to open a fork pull request with "allow edits by
+    # maintainers", which the API turns on by default. First delivery through Harvest, #16.
     pr = bot_gh("api", "-X", "POST", f"repos/{target}/pulls", "-f", f"title={title}", "-f", f"head={head}",
-                "-f", f"base={base}", "-f", f"body={body}")
+                "-f", f"base={base}", "-f", f"body={body}", "-F", "maintainer_can_modify=false")
     return pr["html_url"]
 
 

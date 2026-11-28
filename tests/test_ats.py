@@ -496,6 +496,27 @@ class BotGhTest(unittest.TestCase):
         result, _ = self.run_with('{"html_url": "u"}')
         self.assertEqual(result, {"html_url": "u"})
 
+    def test_api_error_says_why(self):
+        """#16: the run only said "Validation Failed (HTTP 422)"; the API's reason must reach the log."""
+        from unittest import mock
+        body = '{"message": "Validation Failed", "errors": [{"resource": "PullRequest", "code": "custom", ' \
+               '"message": "Fork collab can\'t be granted by someone without permission"}]}'
+        failed = mock.Mock(returncode=1, stdout=body, stderr="gh: Validation Failed (HTTP 422)")
+        with mock.patch.dict(os.environ, {"ANTIPODE_BOT_TOKEN": "t"}), \
+                mock.patch.object(ats.subprocess, "run", return_value=failed):
+            with self.assertRaises(RuntimeError) as caught:
+                ats.bot_gh("api", "-X", "POST", "repos/o/r/pulls")
+        self.assertIn("Fork collab can't be granted", str(caught.exception))
+
+    def test_fork_pull_request_without_maintainer_edits(self):
+        """#16: the bot can't push to the donor's fork, so it must not ask for maintainer edits."""
+        from unittest import mock
+        with mock.patch.object(ats, "gh_json", return_value=[]), \
+                mock.patch.object(ats, "bot_gh", return_value={"html_url": "u"}) as bot:
+            self.assertEqual(ats.open_pull_request("o/t", "main", "d", 16, "T", "B"), "u")
+        args = bot.call_args.args
+        self.assertEqual(args[args.index("maintainer_can_modify=false") - 1], "-F")
+
 
 class LabelRepairTest(unittest.TestCase):
     """Outage of 27/11 (#13): the bot commented, then crashed before the labels. #9 stayed in review
