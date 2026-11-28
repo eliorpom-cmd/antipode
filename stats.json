@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-28T03:54:40.548694+00:00",
+  "generated_at": "2026-11-28T12:10:21.053017+00:00",
   "people": {
     "eliorpom-cmd": {
       "delivered": 0,
@@ -8,18 +8,25 @@
       "merged": 0,
       "received_tokens": 3019569
     },
+    "hhptvoka1379": {
+      "delivered": 0,
+      "donated_tokens": 0,
+      "last_donation_at": null,
+      "merged": 0,
+      "received_tokens": 169239
+    },
     "twistedwhitebranch": {
-      "delivered": 6,
-      "donated_tokens": 3019569,
-      "last_donation_at": "2026-11-27T11:19:54+00:00",
+      "delivered": 7,
+      "donated_tokens": 3188808,
+      "last_donation_at": "2026-11-28T10:56:43+00:00",
       "merged": 5,
       "received_tokens": 0
     }
   },
   "totals": {
-    "delivered": 6,
-    "donated_tokens": 3019569,
+    "delivered": 7,
+    "donated_tokens": 3188808,
     "merged": 5,
-    "requests": 8
+    "requests": 15
   }
 }
