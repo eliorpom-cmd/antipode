@@ -351,6 +351,9 @@ class HardeningTest(unittest.TestCase):
         right = ats.handle_command(text, "bob", {"claimed"}, {"bob"}, TARGET, NOW,
                                    self.ctx([], pr_head={"owner": "bob", "ref": "claude/ats-7"}))
         self.assertEqual(ats.records([bot(right["reply"])])[0]["tokens"], ats.MAX_TOKENS)
+        harvested = ats.handle_command(text, "bob", {"claimed"}, {"bob"}, TARGET, NOW,
+                                       self.ctx([], pr_head={"owner": "antipode-bot", "ref": "claude/ats-7"}))
+        self.assertEqual(harvested["add"], ["delivered"])
 
     def test_late_delivery_by_last_claimer(self):
         claim = {"event": "claim", "donor": "bob", "at": NOW - 7 * 3600}
@@ -508,14 +511,37 @@ class BotGhTest(unittest.TestCase):
                 ats.bot_gh("api", "-X", "POST", "repos/o/r/pulls")
         self.assertIn("Fork collab can't be granted", str(caught.exception))
 
-    def test_fork_pull_request_without_maintainer_edits(self):
-        """#16: the bot can't push to the donor's fork, so it must not ask for maintainer edits."""
+    def test_pull_request_comes_from_the_bot_fork(self):
+        """#16: GitHub refuses a pull request from the donor's fork ("must be a collaborator"). The bot
+        copies the donor's commit into its own fork and opens the pull request from there."""
         from unittest import mock
-        with mock.patch.object(ats, "gh_json", return_value=[]), \
-                mock.patch.object(ats, "bot_gh", return_value={"html_url": "u"}) as bot:
-            self.assertEqual(ats.open_pull_request("o/t", "main", "d", 16, "T", "B"), "u")
-        args = bot.call_args.args
-        self.assertEqual(args[args.index("maintainer_can_modify=false") - 1], "-F")
+        calls = []
+
+        def fake_bot(*args, **kwargs):
+            calls.append(args)
+            if args[-1] == "default_branch_only=true":
+                return {"full_name": "antipode-bot/t"}
+            return {"html_url": "u"} if args[3] == "repos/o/t/pulls" else {}
+
+        def fake_read(*args, **kwargs):
+            if args[1] == "repos/antipode-bot/t":
+                return {"full_name": "antipode-bot/t"}
+            return {"message": "Not Found", "status": "404"}  # what gh prints on a 404
+        with mock.patch.object(ats, "gh_json", side_effect=fake_read), \
+                mock.patch.object(ats, "bot_gh", side_effect=fake_bot):
+            self.assertEqual(ats.open_pull_request("o/t", "main", "d", 16, "T", "B", "abc"), "u")
+        self.assertIn(("api", "-X", "POST", "repos/antipode-bot/t/git/refs", "-f", "ref=refs/heads/claude/ats-16",
+                       "-f", "sha=abc"), calls)
+        self.assertIn("head=antipode-bot:claude/ats-16", calls[-1])
+
+    def test_existing_pull_request_is_reused(self):
+        from unittest import mock
+        def fake_read(*args, **kwargs):
+            return [{"html_url": "by-hand"}] if "head=d:claude/ats-16" in args[1] else []
+        with mock.patch.object(ats, "gh_json", side_effect=fake_read), \
+                mock.patch.object(ats, "bot_gh") as bot:
+            self.assertEqual(ats.open_pull_request("o/t", "main", "d", 16, "T", "B", "abc"), "by-hand")
+        bot.assert_not_called()
 
 
 class LabelRepairTest(unittest.TestCase):

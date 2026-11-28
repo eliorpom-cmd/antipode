@@ -30,6 +30,7 @@ BOT = "antipode-bot"  # writes every visible comment and opens the pull requests
 # Records are trusted only from these accounts; github-actions wrote them before the bot existed.
 BOTS = (BOT, "github-actions[bot]", "github-actions")
 CLAIM_HOURS = 6
+FORK_WAIT_TRIES, FORK_WAIT_SECONDS = 12, 5
 EXPIRE_DAYS = 30
 MAX_OPEN_PER_AUTHOR = 5
 ACTIVE = {"review", "open", "claimed", "relay"}
@@ -209,7 +210,8 @@ def handle_command(text, author, labels, assignees, target_repo, now, ctx=None):
             plan["reply"] = f"@{author} expected `/delivered https://github.com/{target_repo}/pull/<n> tokens=<n>`."
             return plan
         head = ctx.get("pr_head")
-        if head is not None and (head.get("owner", "").lower() != author.lower()
+        # Harvest opens it from the bot's fork, a donor by hand from their own.
+        if head is not None and (head.get("owner", "").lower() not in (author.lower(), BOT)
                                  or head.get("ref") != f"claude/ats-{ctx.get('issue')}"):
             plan["reply"] = (f"@{author} that pull request must come from your fork, branch "
                              f"`claude/ats-{ctx.get('issue')}`.")
@@ -990,7 +992,7 @@ def pr_body(status, issue_url, donor, issue):
             f"{note}\n\n---\n\n"
             f"**Made with [Antipode]({SITE}).** {who} gave their unused Claude Code limit to this "
             f"project. Their agent did the work in a cloud session, from the {request}, and "
-            f"the Antipode bot opened this pull request from `{donor}:claude/ats-{issue}`.\n\n"
+            f"the Antipode bot opened this pull request from a copy of `{donor}:claude/ats-{issue}`.\n\n"
             "How it works: owners of public repositories post what they need with `/antipode:ask`. People "
             "with Claude Code limit left before their weekly reset run `/antipode:give`, and their agent "
             "takes a request. Free and open source: https://github.com/eliorpom-cmd/antipode\n")
@@ -1048,16 +1050,37 @@ def bot_gh(*args, input_text=None, parse_json=True):
     return json.loads(result.stdout) if result.stdout.strip() else None
 
 
-def open_pull_request(target, base, donor, issue, title, body):
-    head = f"{donor}:claude/ats-{issue}"
-    existing = gh_json("api", f"repos/{target}/pulls?head={head}&state=open", check=False) or []
-    if existing:
-        return existing[0]["html_url"]
-    # The bot can't push to the donor's fork, and GitHub refuses (422 "Fork collab can't be granted
-    # by someone without permission") to open a fork pull request with "allow edits by
-    # maintainers", which the API turns on by default. First delivery through Harvest, #16.
-    pr = bot_gh("api", "-X", "POST", f"repos/{target}/pulls", "-f", f"title={title}", "-f", f"head={head}",
-                "-f", f"base={base}", "-f", f"body={body}", "-F", "maintainer_can_modify=false")
+def bot_fork(target):
+    """The bot's own fork of target, created on first use. GitHub makes forks asynchronously,
+    so wait until it answers."""
+    fork = bot_gh("api", "-X", "POST", f"repos/{target}/forks", "-F", "default_branch_only=true")["full_name"]
+    for _ in range(FORK_WAIT_TRIES):
+        # A 404 still prints a JSON error body: test a field, not the answer itself.
+        if (gh_json("api", f"repos/{fork}", check=False) or {}).get("full_name"):
+            return fork
+        time.sleep(FORK_WAIT_SECONDS)
+    raise RuntimeError(f"fork {fork} not ready after {FORK_WAIT_TRIES * FORK_WAIT_SECONDS} s")
+
+
+def open_pull_request(target, base, donor, issue, title, body, sha):
+    """Open the pull request from the bot's fork. GitHub only lets someone open a pull request from
+    a branch they can push to ("must be a collaborator", #16), and the bot has no access to the
+    donor's fork: it copies the donor's commit to the same branch name in its own fork (forks of
+    one repository share their commits) and opens the pull request from there."""
+    branch = f"claude/ats-{issue}"
+    for owner in (BOT, donor):  # the donor may have opened it by hand (#9)
+        existing = gh_json("api", f"repos/{target}/pulls?head={owner}:{branch}&state=open", check=False)
+        if isinstance(existing, list) and existing:
+            return existing[0]["html_url"]
+    fork = bot_fork(target)
+    if (gh_json("api", f"repos/{fork}/git/ref/heads/{branch}", check=False) or {}).get("ref"):
+        bot_gh("api", "-X", "PATCH", f"repos/{fork}/git/refs/heads/{branch}", "-f", f"sha={sha}",
+               "-F", "force=true")
+    else:
+        bot_gh("api", "-X", "POST", f"repos/{fork}/git/refs", "-f", f"ref=refs/heads/{branch}",
+               "-f", f"sha={sha}")
+    pr = bot_gh("api", "-X", "POST", f"repos/{target}/pulls", "-f", f"title={title}",
+                "-f", f"head={fork.split('/')[0]}:{branch}", "-f", f"base={base}", "-f", f"body={body}")
     return pr["html_url"]
 
 
@@ -1094,7 +1117,7 @@ def harvest_issue(issue, now):
     if status["status"] == "delivered":
         issue_url = f"https://github.com/{repo()}/issues/{number}"
         pr_url = open_pull_request(target, base, donor, number, status["title"],
-                                   pr_body(status, issue_url, donor, number))
+                                   pr_body(status, issue_url, donor, number), head["sha"])
     text = harvest_command(status, number, donor, target, pr_url)
     ctx = command_context(full, donor, text)
     plan = handle_command(text, donor, {l["name"] for l in full["labels"]},
