@@ -31,6 +31,18 @@ BOT = "antipode-bot"  # writes every visible comment and opens the pull requests
 BOTS = (BOT, "github-actions[bot]", "github-actions")
 CLAIM_HOURS = 6
 FORK_WAIT_TRIES, FORK_WAIT_SECONDS = 12, 5
+# The plugin signs every comment it posts with this line. Commands without it come from a plugin
+# older than 0.5.0, which may still start donor sessions with GitHub tools (fixed in 0.4.0).
+PLUGIN_MARK_RE = re.compile(r"\n?<!--\s*antipode-plugin\s+(\d+)\.(\d+)\.(\d+)\s*-->")
+MIN_PLUGIN = (0, 5, 0)
+# False: outdated plugins get a notice and their command still runs. True: the command is refused.
+ENFORCE_PLUGIN = False
+PLUGIN_COMMANDS = ("claim", "review", "release")
+UPDATE_BY = "29 November 2026, 18:00 UTC"
+PLUGIN_NOTICE_SINCE = "2026-11-28T17:00:00Z"  # when outdated plugins started getting the notice
+SECURITY_URL = "https://github.com/eliorpom-cmd/antipode/blob/main/SECURITY.md#fixed-in-040"
+UPDATE_STEPS = ("`claude plugin marketplace update antipode`, then `claude plugin update antipode@antipode`, "
+                "then restart Claude Code")
 EXPIRE_DAYS = 30
 MAX_OPEN_PER_AUTHOR = 5
 ACTIVE = {"review", "open", "claimed", "relay"}
@@ -538,8 +550,10 @@ def build_stats(issues, now):
             elif event == "merged":
                 person(rec["donor"])["merged"] += 1
                 totals["merged"] += 1
+    adoption = plugin_adoption(issues, PLUGIN_NOTICE_SINCE)
     return {"generated_at": datetime.fromtimestamp(now, timezone.utc).isoformat(),
-            "totals": totals, "people": people}
+            "totals": totals, "people": people,
+            "plugin": {k: adoption[k] for k in ("since", "current", "outdated")}}
 
 
 # ---------------------------------------------------------------- GitHub side
@@ -680,6 +694,67 @@ def command_context(issue, author, body):
     return ctx
 
 
+def plugin_version(body):
+    """(major, minor, patch) from the plugin's signature line, or None for an unsigned comment."""
+    match = PLUGIN_MARK_RE.search(body or "")
+    return tuple(int(g) for g in match.groups()) if match else None
+
+
+def outdated_plugin(body, author):
+    """True for a donor command from a plugin older than MIN_PLUGIN. The owner types by hand."""
+    text = PLUGIN_MARK_RE.sub("", body or "").strip()
+    verb = text.split()[0][1:].lower() if text.startswith("/") else ""
+    if verb not in PLUGIN_COMMANDS:
+        return False
+    if author.lower() == os.environ.get("GITHUB_REPOSITORY_OWNER", "").lower():
+        return False
+    version = plugin_version(body)
+    return version is None or version < MIN_PLUGIN
+
+
+def update_notice(author):
+    """What an outdated plugin's user reads. The old plugin shows the bot's answer to them."""
+    if ENFORCE_PLUGIN:
+        return (f"@{author} your Antipode plugin is out of date, so this command was not run. It fixes a "
+                f"security problem, described here: {SECURITY_URL}. To update: {UPDATE_STEPS}. Then try "
+                "again.")
+    return (f"**@{author} your Antipode plugin is out of date. Please update it before {UPDATE_BY}.** "
+            "This isn't cosmetic: older versions start donor sessions with your GitHub tools, so a prompt "
+            "hidden in a stranger's repository could reach your other repositories. The fix and what "
+            f"it changes: {SECURITY_URL}. To update: {UPDATE_STEPS}. After {UPDATE_BY}, the bot will "
+            "stop accepting /claim and /review from outdated plugins. This command was run as usual.")
+
+
+def with_notice(reply, notice):
+    """Put the notice above the reply's record, which must stay at the end of the comment."""
+    match = RECORD_RE.search(reply)
+    cut = match.start() if match else len(reply)
+    return reply[:cut].rstrip() + "\n\n" + notice + "\n\n" + reply[cut:]
+
+
+def plugin_adoption(issues, since):
+    """Who posted donor commands since `since`, with the newest plugin version each one used."""
+    seen = {}
+    for issue in issues:
+        for comment in issue.get("comments", []):
+            body = comment.get("body") or ""
+            author = (comment.get("author") or {}).get("login") or ""
+            owner = os.environ.get("GITHUB_REPOSITORY_OWNER") or os.environ.get("GITHUB_REPOSITORY", "/").split("/")[0]
+            if author in BOTS or author.lower() == owner.lower() or not body.lstrip().startswith("/"):
+                continue
+            if (comment.get("createdAt") or "") < since:
+                continue
+            verb = PLUGIN_MARK_RE.sub("", body).strip().split()[0][1:].lower()
+            if verb not in PLUGIN_COMMANDS:
+                continue
+            version = plugin_version(body) or (0, 0, 0)
+            seen[author] = max(seen.get(author, (0, 0, 0)), version)
+    current = sorted(a for a, v in seen.items() if v >= MIN_PLUGIN)
+    outdated = sorted(a for a, v in seen.items() if v < MIN_PLUGIN)
+    return {"since": since, "current": len(current), "outdated": len(outdated),
+            "current_logins": current, "outdated_logins": outdated}
+
+
 def cmd_command(args):
     """Handle every slash comment the bot hasn't answered yet, oldest first.
 
@@ -704,10 +779,18 @@ def cmd_command(args):
         done.add(cid)
         labels = {label["name"] for label in issue["labels"]}
         assignees = {a["login"] for a in issue["assignees"]}
-        ctx = command_context(issue, author, body)
-        plan = handle_command(body, author, labels, assignees, ctx["request"].get("repo") or "", time.time(), ctx)
-        if not plan:
-            continue
+        outdated = outdated_plugin(body, author)
+        body = PLUGIN_MARK_RE.sub("", body).strip()  # the signature is not part of a reason
+        if outdated and ENFORCE_PLUGIN:
+            plan = {"add": [], "remove": [], "assign": [], "unassign": [], "close": False,
+                    "reply": update_notice(author)}
+        else:
+            ctx = command_context(issue, author, body)
+            plan = handle_command(body, author, labels, assignees, ctx["request"].get("repo") or "", time.time(), ctx)
+            if not plan:
+                continue
+            if outdated:
+                plan["reply"] = with_notice(plan["reply"] or f"@{author} done.", update_notice(author))
         plan["reply"] = acknowledge(plan["reply"] or f"@{author} done.", cid)
         apply_plan(args.issue, plan)
 
@@ -1145,6 +1228,13 @@ def cmd_harvest(args):
         sys.exit(f"harvest: {len(failed)} request(s) failed: " + ", ".join(f"#{n}" for n in failed))
 
 
+def cmd_plugins(args):
+    """Who has updated: donors who posted /claim, /review or /release since the notice went out."""
+    issues = gh_json("issue", "list", "-R", repo(), "--state", "all", "--limit", "1000",
+                     "--json", "number,comments")
+    print(json.dumps(plugin_adoption(issues, args.since or PLUGIN_NOTICE_SINCE), indent=2))
+
+
 def cmd_stats(args):
     issues = gh_json("issue", "list", "-R", repo(), "--state", "all", "--limit", "1000",
                      "--json", "number,author,comments")
@@ -1162,10 +1252,12 @@ def main():
     p.add_argument("--action", required=True); p.add_argument("--out", default="report.json")
     sub.add_parser("sweep")
     sub.add_parser("harvest")
+    p = sub.add_parser("plugins"); p.add_argument("--since")
     p = sub.add_parser("stats"); p.add_argument("--out", default="stats.json")
     args = parser.parse_args()
     {"command": cmd_command, "scan": cmd_scan, "intake": cmd_intake,
-     "sweep": cmd_sweep, "harvest": cmd_harvest, "stats": cmd_stats}[args.cmd](args)
+     "sweep": cmd_sweep, "harvest": cmd_harvest, "stats": cmd_stats,
+     "plugins": cmd_plugins}[args.cmd](args)
 
 
 if __name__ == "__main__":

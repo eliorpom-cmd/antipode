@@ -21,6 +21,9 @@ Run `ROOT/references/setup.md` steps 1 to 3 (not the status line yet). Show the 
 
 Use ✗ and the one fix for anything missing, then stop until it is fixed.
 
+Then one line: Antipode's updates don't install themselves. Suggest turning that on once:
+`/plugin` → Marketplaces → antipode → Enable auto-update. Security fixes ship as plugin updates.
+
 ## 2. The tour, in one screen
 
 Show exactly this block (fill `<login>`), then nothing else in that message but step 3's question:

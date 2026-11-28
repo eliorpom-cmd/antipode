@@ -544,6 +544,67 @@ class BotGhTest(unittest.TestCase):
         bot.assert_not_called()
 
 
+class PluginVersionTest(unittest.TestCase):
+    """28/11: the bot tells donors on old plugins (GitHub tools in the session before 0.4.0) to update."""
+
+    MARK = "\n<!-- antipode-plugin 0.5.0 -->"
+
+    def setUp(self):
+        from unittest import mock
+        patcher = mock.patch.dict(os.environ, {"GITHUB_REPOSITORY_OWNER": "owner"})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_signature_is_read(self):
+        self.assertEqual(ats.plugin_version("/claim" + self.MARK), (0, 5, 0))
+        self.assertIsNone(ats.plugin_version("/claim"))
+
+    def test_who_gets_the_notice(self):
+        self.assertTrue(ats.outdated_plugin("/claim", "bob"))
+        self.assertTrue(ats.outdated_plugin("/review ok clarity=4\nfine\n<!-- antipode-plugin 0.4.2 -->", "bob"))
+        self.assertFalse(ats.outdated_plugin("/claim" + self.MARK, "bob"))
+        self.assertFalse(ats.outdated_plugin("/approve", "bob"))  # not a plugin command
+        self.assertFalse(ats.outdated_plugin("/review ok clarity=4\nx", "Owner"))  # the owner types by hand
+
+    def test_notice_sits_above_the_record(self):
+        reply = ats.record_comment("Taken.", {"event": "claim", "donor": "bob"})
+        out = ats.with_notice(reply, ats.update_notice("bob"))
+        self.assertIn("out of date", out)
+        self.assertIn(ats.SECURITY_URL, out)
+        self.assertEqual(ats.records([bot(out)])[0]["event"], "claim")
+        self.assertTrue(out.rstrip().endswith("-->"))
+
+    def test_signature_never_reaches_a_reason(self):
+        body = "/release push denied" + self.MARK
+        plan = ats.handle_command(ats.PLUGIN_MARK_RE.sub("", body).strip(), "bob", {"claimed"}, {"bob"},
+                                  TARGET, NOW, {"records": []})
+        self.assertNotIn("antipode-plugin", plan["reply"])
+
+    def test_enforced_notice_says_nothing_ran(self):
+        from unittest import mock
+        with mock.patch.object(ats, "ENFORCE_PLUGIN", True):
+            self.assertIn("was not run", ats.update_notice("bob"))
+        self.assertIn("was run as usual", ats.update_notice("bob"))
+
+    def test_adoption_counts_each_donor_once_at_their_newest_version(self):
+        def c(author, body, at="2026-11-29T10:00:00Z"):
+            return {"author": {"login": author}, "body": body, "createdAt": at}
+        issues = [{"comments": [c("bob", "/claim"), c("bob", "/release x" + self.MARK),
+                                c("amy", "/review ok clarity=3\nok"), c("old", "/claim", "2026-11-27T00:00:00Z"),
+                                c("antipode-bot", "/claim"), c("eve", "thanks")]}]
+        got = ats.plugin_adoption(issues, "2026-11-28T17:00:00Z")
+        self.assertEqual((got["current_logins"], got["outdated_logins"]), (["bob"], ["amy"]))
+
+    def test_skills_sign_with_the_plugin_version(self):
+        root = os.path.join(os.path.dirname(__file__), "..", "plugins", "antipode")
+        with open(os.path.join(root, ".claude-plugin", "plugin.json")) as f:
+            version = json.load(f)["version"]
+        for path in ("references/setup.md", "skills/give/SKILL.md"):
+            with open(os.path.join(root, path)) as f:
+                self.assertIn(f"<!-- antipode-plugin {version} -->", f.read(), path)
+        self.assertLessEqual(ats.MIN_PLUGIN, tuple(int(x) for x in version.split(".")))
+
+
 class LabelRepairTest(unittest.TestCase):
     """Outage of 27/11 (#13): the bot commented, then crashed before the labels. #9 stayed in review
     although its record said it was listed. The next pass must put the labels back."""

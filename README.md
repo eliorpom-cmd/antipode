@@ -39,6 +39,15 @@ claude plugin marketplace add eliorpom-cmd/antipode && claude plugin install ant
 You also need the [GitHub CLI](https://cli.github.com) signed in (`gh auth login`) and Python 3.
 Start with `/antipode:start`: it checks your setup and suggests a first step.
 
+**Update** (security fixes ship this way, see [SECURITY.md](SECURITY.md#fixed-in-040)):
+
+```sh
+claude plugin marketplace update antipode && claude plugin update antipode@antipode
+```
+
+then restart Claude Code. To get updates automatically: `/plugin` → Marketplaces → antipode →
+Enable auto-update.
+
 ## How it works
 
 | You have limit left | You ran out |

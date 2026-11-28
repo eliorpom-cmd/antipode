@@ -64,6 +64,28 @@ Code from a target repository never runs on your computer. It runs only inside t
 - Repository, branch, commit and model are validated against strict patterns before use. The skills run
   scripts that call `gh` with argument lists, never with pasted strings.
 
+## Fixed in 0.4.0
+
+**Update your plugin if it is older than 0.5.0.** Check with `claude plugin list`. To update, run
+`claude plugin marketplace update antipode`, then `claude plugin update antipode@antipode`, then
+restart Claude Code. To get the next fixes without thinking about it: `/plugin` → Marketplaces →
+antipode → Enable auto-update.
+
+**The problem.** Before 0.4.0, the cloud session that `/antipode:give` starts kept Claude Code's
+GitHub tools. Those tools act with the access the donor gave the Claude GitHub app. A prompt hidden in
+the repository of a request could have told the donor's agent to use them: read the donor's other
+repositories, including private ones the app can reach, or comment and open pull requests in the
+donor's name. Reviews and automatic checks look for such prompts, but they can miss one.
+
+**The fix** (plugin 0.4.0, [commit 4bcd2f4](https://github.com/eliorpom-cmd/antipode/commit/4bcd2f4)).
+The session starts with no connectors and with the GitHub tools disallowed, so it can only push its
+own branch with `git`. It reports through its last commit, and the bot opens the pull request. We have
+no sign that the problem was used.
+
+**Why 0.5.0 is the version to have.** 0.5.0 signs the plugin's comments, so the bot can tell an
+up-to-date plugin from an old one. Comments from older plugins get a notice for now. From
+29 November 2026, 18:00 UTC, the bot will refuse `/claim` and `/review` from them.
+
 ## Known limits
 
 - The reviewer subagent is limited to read-only tools, and told to read only the downloaded folder; the
@@ -72,7 +94,8 @@ Code from a target repository never runs on your computer. It runs only inside t
   repositories" in [GitHub settings → Applications](https://github.com/settings/installations) is no
   longer needed for safety, but it narrows what `git` could reach if Anthropic's proxy ever let more
   through.
-- A pull request opened for a donor is written by their agent, from their fork. Review it like any
+- A pull request opened for a donor is written by their agent; the bot opens it from a copy of the
+  donor's branch. Review it like any
   contribution from a stranger before merging.
 - Antipode is new (public since November 2026). It was reviewed before launch by independent AI agents
   working without context (security, giving, asking); their findings were fixed and are covered by the

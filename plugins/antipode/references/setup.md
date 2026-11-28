@@ -6,6 +6,10 @@ full in every command (`-R eliorpom-cmd/antipode`), never through a shell variab
 Everything uses the user's own `gh` login and their own subscription. Never ask for, read or
 store Claude credentials.
 
+**Every comment you post** on `eliorpom-cmd/antipode` (`/claim`, `/review`, `/release`) ends with this
+line, on its own line: `<!-- antipode-plugin 0.5.0 -->`. The bot reads it to know the plugin is up to date; it is
+invisible on GitHub. Use `--body-file` (or a body with a real line break) so the line stays separate.
+
 1. `gh auth status` must succeed. If `gh` is missing, give the install link
    (https://cli.github.com) and stop. If it is not signed in, tell the user to run
    `gh auth login` in a terminal and stop.

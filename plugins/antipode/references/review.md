@@ -25,7 +25,7 @@ safe. Reviews count from GitHub accounts older than 90 days.
    first line exactly one of:
    - `/review ok clarity=<n>`
    - `/review refuse security` · `/review refuse policy` · `/review refuse unclear`
-   and the reason on the next line.
+   the reason on the next line, and the plugin line from setup as the last line.
 6. **Read the bot's answer** (`gh issue view <n> -R eliorpom-cmd/antipode --json comments --jq '.comments[-1].body'`
    after about a minute) and tell the user in one line per request: title, verdict, what the bot said
    (counted, listed, or why it wasn't counted).

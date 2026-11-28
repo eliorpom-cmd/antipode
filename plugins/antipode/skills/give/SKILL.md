@@ -32,7 +32,7 @@ description: Give leftover Claude Code limit to someone's public project. Shows 
    a last line "or say: pick for me". Wait for a number, "pick for me", or "more" to draw again.
    An empty list: say nothing fits right now, and that `/antipode:ask` on one of
    their own public repositories is the other way to use Antipode today.
-4. **Claim.** Comment `/claim` on the issue (`gh issue comment <n> -R $C --body "/claim"`; if this
+4. **Claim.** Comment `/claim` on the issue (`gh issue comment <n> -R $C --body $'/claim\n<!-- antipode-plugin 0.5.0 -->'`; if this
    fails, show the error and stop). Wait up to 2 minutes for the bot's answer
    (`gh issue view <n> -R $C --json assignees,comments`): if the user is assigned, go on; otherwise tell
    them what the bot said (taken by someone else, account too new, already holding a request) and offer
