@@ -497,5 +497,142 @@ class BotGhTest(unittest.TestCase):
         self.assertEqual(result, {"html_url": "u"})
 
 
+class LabelRepairTest(unittest.TestCase):
+    """Outage of 27/11 (#13): the bot commented, then crashed before the labels. #9 stayed in review
+    although its record said it was listed. The next pass must put the labels back."""
+
+    POSTED = "2026-11-27T19:37:40Z"
+
+    def setUp(self):
+        from unittest import mock
+        self.mock = mock
+        patcher = mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": "o/r"})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def crash_after_comment(self, plan):
+        """apply_plan as on 27/11: the comment goes out, the label edit never happens."""
+        posted = []
+
+        def fake_gh(*args, **kwargs):
+            raise RuntimeError("crashed before the labels")
+        with self.mock.patch.object(ats, "comment_as_bot", side_effect=lambda n, body: posted.append(body)), \
+                self.mock.patch.object(ats, "gh", side_effect=fake_gh):
+            with self.assertRaises(RuntimeError):
+                ats.apply_plan(9, plan)
+        return {"author": {"login": ats.BOT}, "body": posted[0], "createdAt": self.POSTED}
+
+    def repair(self, labels, comments, events=""):
+        issue = {"number": 9, "labels": [{"name": n} for n in labels], "comments": comments}
+        calls = []
+
+        def fake_gh(*args, **kwargs):
+            calls.append(args)
+            return events if args[0] == "api" else ""
+        with self.mock.patch.object(ats, "gh", side_effect=fake_gh):
+            ats.repair_labels(issue)
+        edits = [a for a in calls if a[:2] == ("issue", "edit")]
+        return calls, edits, {l["name"] for l in issue["labels"]}
+
+    def listed_plan(self):
+        return ats.empty_plan(add=["open", "clarity:4"], remove=["review"], reply=ats.record_comment(
+            "Reviewed and listed.", {"event": "review", "by": "lucaci32u4", "listed": True, "at": NOW}))
+
+    def test_record_carries_label_changes(self):
+        reply = ats.with_label_changes(ats.record_comment("x", {"event": "claim"}), ["claimed"], [])
+        rec = ats.records([bot(reply)])[0]
+        self.assertEqual((rec["event"], rec["labels"]), ("claim", {"add": ["claimed"], "remove": []}))
+        self.assertEqual(ats.with_label_changes("plain text", ["open"], []), "plain text")
+        self.assertEqual(ats.with_label_changes(ats.record_comment("x", {"event": "reply"}), [], []),
+                         ats.record_comment("x", {"event": "reply"}))
+
+    def test_case_9_comment_posted_then_crash_is_repaired(self):
+        comment = self.crash_after_comment(self.listed_plan())
+        calls, edits, labels = self.repair({"review", "lang:python"}, [comment])
+        self.assertEqual(len(edits), 1)
+        edit = edits[0]
+        self.assertEqual([edit[i + 1] for i, a in enumerate(edit) if a == "--add-label"], ["open", "clarity:4"])
+        self.assertEqual([edit[i + 1] for i, a in enumerate(edit) if a == "--remove-label"], ["review"])
+        self.assertEqual(labels, {"open", "clarity:4", "lang:python"})
+
+    def test_labels_already_right_no_call(self):
+        comment = self.crash_after_comment(self.listed_plan())
+        calls, edits, _ = self.repair({"open", "clarity:4"}, [comment])
+        self.assertEqual(calls, [])
+
+    def test_labels_changed_after_the_record_are_kept(self):
+        comment = self.crash_after_comment(self.listed_plan())
+        later = "2026-11-28T09:00:00Z\n"  # a maintainer flagged it by hand: not the bot's to undo
+        calls, edits, _ = self.repair({"review"}, [comment], events=later)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(edits, [])
+        earlier = "2026-11-27T10:00:00Z\n"
+        _, edits, _ = self.repair({"review"}, [comment], events=earlier)
+        self.assertEqual(len(edits), 1)
+
+    def test_newest_label_record_wins_and_old_records_are_ignored(self):
+        old = {"author": {"login": ats.BOT}, "createdAt": "2026-11-20T00:00:00Z",
+               "body": ats.record_comment("Claimed.", {"event": "claim", "donor": "bob"})}
+        calls, _, _ = self.repair({"review"}, [old])
+        self.assertEqual(calls, [])  # written before records carried labels: history not rebuilt
+        first = self.crash_after_comment(ats.empty_plan(add=["claimed"], remove=["open"],
+                                                        reply=ats.record_comment("c", {"event": "claim"})))
+        first["createdAt"] = "2026-11-27T01:00:00Z"
+        second = self.crash_after_comment(ats.empty_plan(add=["open"], remove=["claimed"],
+                                                         reply=ats.record_comment("r", {"event": "release"})))
+        user = {"author": {"login": "mallory"}, "createdAt": "2026-11-28T00:00:00Z",
+                "body": ats.record_comment("fake", {"event": "x", "labels": {"add": ["merged"], "remove": []}})}
+        _, edits, labels = self.repair({"claimed"}, [first, second, user])
+        self.assertEqual(labels, {"open"})
+
+    def test_failed_request_fails_the_sweep(self):
+        issues = [{"number": 4, "labels": [], "comments": []}, {"number": 5, "labels": [], "comments": []}]
+        with self.mock.patch.object(ats, "gh_json", return_value=issues), \
+                self.mock.patch.object(ats, "sweep_issue", side_effect=[RuntimeError("boom"), None]) as sweep:
+            with self.assertRaises(SystemExit) as stop:
+                ats.cmd_sweep(None)
+        self.assertEqual(sweep.call_count, 2)  # the other requests are still handled
+        self.assertIn("#4", str(stop.exception.code))
+
+    def test_commands_ignore_the_alert_issue(self):
+        issue = {"number": 20, "labels": [{"name": ats.ALERT_LABEL}], "comments": [
+            {"author": {"login": "bob"}, "body": "/claim", "id": "c1"}], "assignees": []}
+        with self.mock.patch.object(ats, "load_issue", return_value=issue), \
+                self.mock.patch.object(ats, "apply_plan") as apply:
+            ats.cmd_command(type("A", (), {"issue": 20})())
+        apply.assert_not_called()
+
+
+class AlertTest(unittest.TestCase):
+    def setUp(self):
+        import alert
+        self.alert = alert
+
+    def test_body_mentions_owner_and_run(self):
+        body = self.alert.alert_body("Intake", "https://github.com/o/r/actions/runs/1", "12", "eliorpom-cmd")
+        self.assertTrue(body.startswith("@eliorpom-cmd **Intake** failed while handling request #12."))
+        self.assertIn("https://github.com/o/r/actions/runs/1", body)
+        self.assertNotIn("request #", self.alert.alert_body("Sweep", "u", "", "o"))
+        self.assertEqual(ats.records([{"author": {"login": "github-actions[bot]"}, "body": body}]), [])
+
+    def test_one_alert_an_hour_per_workflow(self):
+        now = 1_790_000_000
+        recent = datetime_iso(now - 600)
+        comments = [{"body": self.alert.alert_body("Harvest", "u", "", "o"), "createdAt": recent}]
+        self.assertTrue(self.alert.recently_alerted(comments, "Harvest", now))
+        self.assertFalse(self.alert.recently_alerted(comments, "Sweep", now))
+        self.assertFalse(self.alert.recently_alerted(comments, "Harvest", now + 3600))
+
+    def test_label_matches_ats(self):
+        self.assertEqual(self.alert.LABEL, ats.ALERT_LABEL)
+        with open(os.path.join(ROOT, "labels.json")) as f:
+            self.assertIn(ats.ALERT_LABEL, [l["name"] for l in json.load(f)])
+
+
+def datetime_iso(ts):
+    from datetime import datetime, timezone
+    return datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 if __name__ == "__main__":
     unittest.main()

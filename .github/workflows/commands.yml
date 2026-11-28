@@ -28,3 +28,10 @@ jobs:
           ANTIPODE_BOT_TOKEN: ${{ secrets.ANTIPODE_BOT_TOKEN }}
           NUMBER: ${{ github.event.issue.number }}
         run: python3 scripts/ats.py command --issue "$NUMBER"
+      - name: Tell the maintainer
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: python3 scripts/alert.py --workflow "$GITHUB_WORKFLOW" --run-url "$RUN_URL" --issue "$NUMBER"

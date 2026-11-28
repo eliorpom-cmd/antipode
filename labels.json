@@ -73,5 +73,10 @@
     "name": "clarity:5",
     "color": "c2e0c6",
     "description": "Clarity score 5/5"
+  },
+  {
+    "name": "bot-alert",
+    "color": "b60205",
+    "description": "Bot runs that failed (not a request)"
   }
 ]

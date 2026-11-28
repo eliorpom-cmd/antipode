@@ -33,6 +33,7 @@ CLAIM_HOURS = 6
 EXPIRE_DAYS = 30
 MAX_OPEN_PER_AUTHOR = 5
 ACTIVE = {"review", "open", "claimed", "relay"}
+ALERT_LABEL = "bot-alert"  # the single "Bot run failed" issue (scripts/alert.py), never a request
 # Only the record that ends a bot comment counts: user text echoed above it can't add one.
 RECORD_RE = re.compile(r"<!-- ats:record (\{[^\n]*\}) -->\s*\Z")
 FROZEN_MARK = "<!-- ats:frozen"
@@ -436,6 +437,56 @@ def risky_files(paths, package_json=None):
     return notes
 
 
+def with_label_changes(reply, add, remove):
+    """Write the plan's label changes into the record that ends the reply (no record: unchanged)."""
+    match = RECORD_RE.search(reply or "")
+    if not match or not (add or remove):
+        return reply
+    rec = json.loads(match.group(1))
+    rec["labels"] = {"add": list(add), "remove": list(remove)}
+    return reply[:match.start()] + f"<!-- ats:record {json.dumps(rec, separators=(',', ':'))} -->"
+
+
+def iso_time(text):
+    try:
+        return datetime.fromisoformat(str(text).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def last_label_record(comments):
+    """(label changes, time posted) of the newest bot record that carries label changes. Records
+    written before they carried labels are skipped: the history is not rebuilt."""
+    for comment in reversed(comments):
+        if not is_bot(comment):
+            continue
+        match = RECORD_RE.search(comment.get("body") or "")
+        if not match:
+            continue
+        try:
+            rec = json.loads(match.group(1))
+        except ValueError:
+            continue
+        changes = rec.get("labels") if isinstance(rec, dict) else None
+        if isinstance(changes, dict):
+            return changes, iso_time(comment.get("createdAt"))
+    return None, None
+
+
+def label_repair(labels, changes):
+    """(labels to add, labels to remove) so the issue matches the label changes of its last record."""
+    def names(key):
+        value = changes.get(key)
+        return [n for n in value if isinstance(n, str)] if isinstance(value, list) else []
+    return ([n for n in names("add") if n not in labels], [n for n in names("remove") if n in labels])
+
+
+def labels_touched_since(event_times, posted):
+    """True when someone (a maintainer, a later run) changed labels after the record was posted:
+    then the record is no longer the truth, and the repair must not undo that change."""
+    return any(t is not None and t >= posted for t in map(iso_time, event_times))
+
+
 def sweep_plan(issue, recs, now):
     """What the hourly sweep should do with one issue. Returns a list of (action, detail)."""
     labels = {label["name"] for label in issue["labels"]}
@@ -522,7 +573,8 @@ def comment_as_bot(number, body):
 
 def apply_plan(number, plan):
     if plan["reply"]:
-        comment_as_bot(number, plan["reply"])
+        # The record names the label changes, so a run that crashes after the comment is repaired later.
+        comment_as_bot(number, with_label_changes(plan["reply"], plan["add"], plan["remove"]))
     if plan["add"] or plan["remove"]:
         args = ["issue", "edit", str(number), "-R", repo()]
         for name in plan["add"]:
@@ -536,6 +588,30 @@ def apply_plan(number, plan):
         gh("issue", "edit", str(number), "-R", repo(), "--remove-assignee", login, check=False)
     if plan["close"]:
         gh("issue", "close", str(number), "-R", repo())
+
+
+def repair_labels(issue):
+    """Outage of 27/11 (#13): the bot posted its comment, then crashed before changing the labels.
+    The record was there, so no later command replayed it. Each pass puts the labels back in line
+    with the newest record, unless labels were changed by anyone after that record."""
+    changes, posted = last_label_record(issue.get("comments") or [])
+    if not changes or posted is None:
+        return
+    labels = {label["name"] for label in issue["labels"]}
+    add, remove = label_repair(labels, changes)
+    if not add and not remove:
+        return
+    try:
+        times = gh("api", f"repos/{repo()}/issues/{issue['number']}/events", "--paginate", "--jq",
+                   '.[] | select(.event == "labeled" or .event == "unlabeled") | .created_at')
+    except RuntimeError as error:
+        print(f"repair: request #{issue['number']} not checked: {error}", file=sys.stderr)
+        return
+    if labels_touched_since(times.split(), posted):
+        return
+    apply_plan(issue["number"], empty_plan(add=add, remove=remove))
+    issue["labels"] = [l for l in issue["labels"] if l["name"] not in remove] + [{"name": n} for n in add]
+    print(f"repair: request #{issue['number']} labels +{add} -{remove}", file=sys.stderr)
 
 
 def empty_plan(**changes):
@@ -608,6 +684,10 @@ def cmd_command(args):
     Runs can be replaced while queued (GitHub keeps one pending run per group), so each run catches
     up on everything instead of trusting that its own comment is the only one.
     """
+    first = load_issue(args.issue)
+    if ALERT_LABEL in {label["name"] for label in first["labels"]}:
+        return  # the "Bot run failed" issue is not a request
+    repair_labels(first)
     done = set()
     for _ in range(30):
         issue = load_issue(args.issue)
@@ -749,6 +829,8 @@ def cmd_intake(args):
     labels = {label["name"] for label in issue["labels"]}
     if not issue["title"].startswith("[request]") and not labels & STATE_LABELS:
         return
+    repair_labels(issue)
+    labels = {label["name"] for label in issue["labels"]}
     if args.action != "opened":
         if "delivered" in labels or "merged" in labels:
             return  # done; edits no longer matter
@@ -771,14 +853,19 @@ def cmd_sweep(args):
     now = time.time()
     issues = gh_json("issue", "list", "-R", repo(), "--state", "open", "--limit", "500",
                      "--json", "number,labels,createdAt,comments")
+    failed = []
     for issue in issues:
         try:
             sweep_issue(issue, now)
         except Exception as error:  # one broken request must not stop the others
             print(f"sweep: request #{issue['number']} skipped: {error}", file=sys.stderr)
+            failed.append(issue["number"])
+    if failed:  # the run fails, so the workflow's alert step tells the maintainer
+        sys.exit(f"sweep: {len(failed)} request(s) failed: " + ", ".join(f"#{n}" for n in failed))
 
 
 def sweep_issue(issue, now):
+    repair_labels(issue)
     recs = records(issue["comments"])
     for action, detail in sweep_plan(issue, recs, now):
         if action == "free_claim":
@@ -954,6 +1041,7 @@ def open_pull_request(target, base, donor, issue, title, body):
 
 
 def harvest_issue(issue, now):
+    repair_labels(issue)
     recs = records(issue["comments"])
     found = harvest_candidate(issue, recs, now)
     if not found:
@@ -1002,11 +1090,15 @@ def cmd_harvest(args):
     now = time.time()
     issues = gh_json("issue", "list", "-R", repo(), "--state", "open", "--limit", "500",
                      "--json", "number,labels,comments")
+    failed = []
     for issue in issues:
         try:
             harvest_issue(issue, now)
         except Exception as error:  # one broken request must not stop the others
             print(f"harvest: request #{issue['number']} skipped: {error}", file=sys.stderr)
+            failed.append(issue["number"])
+    if failed:  # the run fails, so the workflow's alert step tells the maintainer
+        sys.exit(f"harvest: {len(failed)} request(s) failed: " + ", ".join(f"#{n}" for n in failed))
 
 
 def cmd_stats(args):

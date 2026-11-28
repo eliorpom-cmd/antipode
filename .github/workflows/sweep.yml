@@ -24,13 +24,22 @@ jobs:
           ANTIPODE_BOT_TOKEN: ${{ secrets.ANTIPODE_BOT_TOKEN }}
         run: python3 scripts/ats.py sweep
       - name: Rebuild stats
+        if: ${{ !cancelled() }}  # a failed request in the sweep must not stop the stats
         env:
           GH_TOKEN: ${{ github.token }}
           ANTIPODE_BOT_TOKEN: ${{ secrets.ANTIPODE_BOT_TOKEN }}
         run: python3 scripts/ats.py stats --out stats.json
       - name: Commit stats
+        if: ${{ !cancelled() }}
         run: |
           git config user.name "antipode-bot"
           git config user.email "362008989+antipode-bot@users.noreply.github.com"
           git add stats.json
           git diff --cached --quiet || { git commit -qm "Update stats"; git push -q; }
+      - name: Tell the maintainer
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: python3 scripts/alert.py --workflow "$GITHUB_WORKFLOW" --run-url "$RUN_URL" --issue "$NUMBER"
