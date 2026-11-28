@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-28T15:10:19.437349+00:00",
+  "generated_at": "2026-11-28T16:10:27.578534+00:00",
   "people": {
     "eliorpom-cmd": {
       "delivered": 0,
@@ -15,6 +15,20 @@
       "merged": 0,
       "received_tokens": 169239
     },
+    "leyn06": {
+      "delivered": 0,
+      "donated_tokens": 0,
+      "last_donation_at": null,
+      "merged": 0,
+      "received_tokens": 764184
+    },
+    "lucaci32u4": {
+      "delivered": 1,
+      "donated_tokens": 764184,
+      "last_donation_at": "2026-11-28T16:03:14+00:00",
+      "merged": 0,
+      "received_tokens": 0
+    },
     "twistedwhitebranch": {
       "delivered": 7,
       "donated_tokens": 3188808,
@@ -24,9 +38,9 @@
     }
   },
   "totals": {
-    "delivered": 7,
-    "donated_tokens": 3188808,
+    "delivered": 8,
+    "donated_tokens": 3952992,
     "merged": 5,
-    "requests": 17
+    "requests": 18
   }
 }
